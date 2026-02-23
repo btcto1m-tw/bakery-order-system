@@ -58,7 +58,7 @@
         // ============================================
         // 🔧 重要設定：請在此填入您的 Google Apps Script 網址
         // ============================================
-        const GOOGLE_SCRIPT_URL = 'YOUR_GOOGLE_SCRIPT_URL_HERE';
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw35OmDlvLHfjQwJcVPr5M7EMfZEC4OtIDSyt5yhkJu7w2gK9DT8EkEFHfJzVnyRZLd/exec';
         // 範例：'https://script.google.com/macros/s/AKfycby.../exec'
         // ============================================
 
@@ -426,9 +426,14 @@
         // （為了節省篇幅，這裡使用原本的元件程式碼）
 
         function NewOrderForm({ onSubmit, editingOrder, onCancel }) {
-          const [hasEgg, setHasEgg] = useState(editingOrder?.hasEgg ?? true);
+          const [hasEgg, setHasEgg] = useState(editingOrder?.hasEgg ?? false);
           const [worshipItems, setWorshipItems] = useState(editingOrder?.worshipItems ?? []);
-          const [otherItems, setOtherItems] = useState(editingOrder?.otherItems ?? '');
+          // 處理舊資料兼容：如果是字串就轉換為空陣列，如果是陣列就直接用
+          const [otherItems, setOtherItems] = useState(() => {
+            if (!editingOrder?.otherItems) return [];
+            if (typeof editingOrder.otherItems === 'string') return [];
+            return editingOrder.otherItems;
+          });
           const [totalAmount, setTotalAmount] = useState(editingOrder?.totalAmount ?? 0);
           const [deposit, setDeposit] = useState(editingOrder?.deposit ?? 0);
           const [pickupDate, setPickupDate] = useState(editingOrder?.pickupDate ?? '');
@@ -450,6 +455,20 @@
 
           const removeWorshipItem = (index) => {
             setWorshipItems(worshipItems.filter((_, i) => i !== index));
+          };
+
+          const addOtherItem = () => {
+            setOtherItems([...otherItems, { name: '', quantity: 1 }]);
+          };
+
+          const updateOtherItem = (index, field, value) => {
+            const updated = [...otherItems];
+            updated[index] = { ...updated[index], [field]: value };
+            setOtherItems(updated);
+          };
+
+          const removeOtherItem = (index) => {
+            setOtherItems(otherItems.filter((_, i) => i !== index));
           };
 
           const handleSubmit = (e) => {
@@ -626,26 +645,76 @@
                 </Section>
 
                 <Section title="其他商品">
-                  <textarea
-                    value={otherItems}
-                    onChange={(e) => setOtherItems(e.target.value)}
-                    placeholder="請每行一個商品，格式：商品名稱 x數量
+                  {otherItems.map((item, index) => (
+                    <div key={index} style={{
+                      display: 'grid',
+                      gridTemplateColumns: '2fr 1fr auto',
+                      gap: '1rem',
+                      marginBottom: '1rem',
+                      alignItems: 'center',
+                    }}>
+                      <input
+                        type="text"
+                        value={item.name}
+                        onChange={(e) => updateOtherItem(index, 'name', e.target.value)}
+                        placeholder="商品名稱（例如：紅豆麵包）"
+                        style={{
+                          padding: '0.75rem',
+                          fontSize: '1.1rem',
+                          border: '2px solid #E0E0E0',
+                          borderRadius: '8px',
+                        }}
+                      />
 
-例如：
-紅豆麵包 x5
-芋頭麵包 x3
-波蘿麵包 x10"
-                    rows={6}
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => updateOtherItem(index, 'quantity', e.target.value)}
+                        placeholder="數量"
+                        style={{
+                          padding: '0.75rem',
+                          fontSize: '1.1rem',
+                          border: '2px solid #E0E0E0',
+                          borderRadius: '8px',
+                        }}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => removeOtherItem(index)}
+                        style={{
+                          padding: '0.75rem',
+                          background: '#FF6B6B',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addOtherItem}
                     style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      fontSize: '1.1rem',
-                      border: '2px solid #E0E0E0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.75rem 1.5rem',
+                      background: '#D4915D',
+                      color: 'white',
+                      border: 'none',
                       borderRadius: '8px',
-                      fontFamily: 'inherit',
-                      resize: 'vertical',
+                      fontSize: '1.1rem',
+                      cursor: 'pointer',
+                      marginTop: '1rem',
                     }}
-                  />
+                  >
+                    ➕ 新增商品
+                  </button>
                 </Section>
 
                 <Section title="備註">
@@ -989,14 +1058,23 @@
                     {order.otherItems && (
                       <div style={{ marginTop: '0.5rem' }}>
                         <strong>其他商品：</strong>
-                        <pre style={{ 
-                          display: 'inline',
-                          whiteSpace: 'pre-wrap',
-                          fontFamily: 'inherit',
-                          margin: 0,
-                        }}>
-                          {order.otherItems}
-                        </pre>
+                        {Array.isArray(order.otherItems) ? (
+                          order.otherItems.map((item, idx) => (
+                            <span key={idx}>
+                              {item.name} x{item.quantity}
+                              {idx < order.otherItems.length - 1 ? '、' : ''}
+                            </span>
+                          ))
+                        ) : (
+                          <pre style={{ 
+                            display: 'inline',
+                            whiteSpace: 'pre-wrap',
+                            fontFamily: 'inherit',
+                            margin: 0,
+                          }}>
+                            {order.otherItems}
+                          </pre>
+                        )}
                       </div>
                     )}
                     
@@ -1143,21 +1221,31 @@
 
             // 統計其他商品
             if (order.otherItems) {
-              const lines = order.otherItems.split('\n');
-              lines.forEach(line => {
-                if (line.trim()) {
-                  // 嘗試解析格式：商品名稱 x數量
-                  const match = line.trim().match(/^(.+?)\s*x\s*(\d+)$/i);
-                  if (match) {
-                    const itemName = match[1].trim();
-                    const quantity = parseInt(match[2]);
-                    itemStats[itemName] = (itemStats[itemName] || 0) + quantity;
-                  } else {
-                    // 如果沒有 x格式，整行當作商品名稱，數量為 1
-                    itemStats[line.trim()] = (itemStats[line.trim()] || 0) + 1;
+              if (Array.isArray(order.otherItems)) {
+                // 新格式：陣列
+                order.otherItems.forEach(item => {
+                  if (item.name && item.name.trim()) {
+                    itemStats[item.name.trim()] = (itemStats[item.name.trim()] || 0) + Number(item.quantity);
                   }
-                }
-              });
+                });
+              } else {
+                // 舊格式：字串（向下兼容）
+                const lines = order.otherItems.split('\n');
+                lines.forEach(line => {
+                  if (line.trim()) {
+                    // 嘗試解析格式：商品名稱 x數量
+                    const match = line.trim().match(/^(.+?)\s*x\s*(\d+)$/i);
+                    if (match) {
+                      const itemName = match[1].trim();
+                      const quantity = parseInt(match[2]);
+                      itemStats[itemName] = (itemStats[itemName] || 0) + quantity;
+                    } else {
+                      // 如果沒有 x格式，整行當作商品名稱，數量為 1
+                      itemStats[line.trim()] = (itemStats[line.trim()] || 0) + 1;
+                    }
+                  }
+                });
+              }
             }
           });
           
@@ -1301,7 +1389,17 @@
               
               // 顯示其他商品
               if (order.otherItems) {
-                content += order.otherItems.replace(/\n/g, ' ');
+                if (Array.isArray(order.otherItems)) {
+                  // 新格式：陣列
+                  order.otherItems.forEach(item => {
+                    if (item.name && item.name.trim()) {
+                      content += `${item.name.trim()} x${item.quantity} `;
+                    }
+                  });
+                } else {
+                  // 舊格式：字串
+                  content += order.otherItems.replace(/\n/g, ' ');
+                }
               }
               
               content += '\n';
@@ -1333,7 +1431,17 @@
               
               // 顯示其他商品
               if (order.otherItems) {
-                content += order.otherItems.replace(/\n/g, ' ');
+                if (Array.isArray(order.otherItems)) {
+                  // 新格式：陣列
+                  order.otherItems.forEach(item => {
+                    if (item.name && item.name.trim()) {
+                      content += `${item.name.trim()} x${item.quantity} `;
+                    }
+                  });
+                } else {
+                  // 舊格式：字串
+                  content += order.otherItems.replace(/\n/g, ' ');
+                }
               }
               
               content += '\n';
@@ -1537,12 +1645,22 @@
           }
 
           if (order.otherItems) {
-            const lines = order.otherItems.split('\n');
-            lines.forEach(line => {
-              if (line.trim()) {
-                content += `${line.trim()}\n`;
-              }
-            });
+            if (Array.isArray(order.otherItems)) {
+              // 新格式：陣列
+              order.otherItems.forEach(item => {
+                if (item.name && item.name.trim()) {
+                  content += `${item.name.trim()} x${item.quantity}\n`;
+                }
+              });
+            } else {
+              // 舊格式：字串
+              const lines = order.otherItems.split('\n');
+              lines.forEach(line => {
+                if (line.trim()) {
+                  content += `${line.trim()}\n`;
+                }
+              });
+            }
           }
 
           if (order.notes) {
