@@ -58,7 +58,7 @@
         // ============================================
         // 🔧 重要設定：請在此填入您的 Google Apps Script 網址
         // ============================================
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw35OmDlvLHfjQwJcVPr5M7EMfZEC4OtIDSyt5yhkJu7w2gK9DT8EkEFHfJzVnyRZLd/exec';
+        const GOOGLE_SCRIPT_URL = 'YOUR_GOOGLE_SCRIPT_URL_HERE';
         // 範例：'https://script.google.com/macros/s/AKfycby.../exec'
         // ============================================
 
@@ -77,6 +77,21 @@
 
         const FILLING_OPTIONS = ['紅豆', '烏豆', '綠豆', '鳳梨', '素魯肉'];
         const PICKUP_TIMES = ['下午4點前', '下午4點後', '其他'];
+
+        // 格式化取貨時間顯示
+        const formatPickupTime = (pickupDate, pickupTime, customPickupTime) => {
+          if (!pickupDate) return '';
+          
+          // 移除可能的時間戳記部分，只保留日期
+          const dateOnly = pickupDate.split('T')[0];
+          
+          let timeStr = pickupTime;
+          if (pickupTime === '其他' && customPickupTime) {
+            timeStr = customPickupTime;
+          }
+          
+          return `${dateOnly} ${timeStr}`;
+        };
 
         // 生成訂單編號
         const generateOrderId = () => {
@@ -948,8 +963,7 @@
                     <div><strong>取貨人：</strong>{order.customerName} | {order.phone}</div>
                     <div>
                       <strong>取貨時間：</strong>
-                      {order.pickupDate} {order.pickupTime}
-                      {order.customPickupTime && ` (${order.customPickupTime})`}
+                      {formatPickupTime(order.pickupDate, order.pickupTime, order.customPickupTime)}
                     </div>
                     <div><strong>總金額：</strong>${order.totalAmount} | <strong>訂金：</strong>${order.deposit} | <strong>尾款：</strong>${order.totalAmount - order.deposit}</div>
                     
@@ -1057,17 +1071,26 @@
         }
 
         function ProductionList({ orders }) {
+          const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+          
           const today = new Date().toISOString().split('T')[0];
           const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
+          // 根據選擇的日期計算
+          const isToday = selectedDate === today;
+          const selectedDateObj = new Date(selectedDate);
+          const nextDay = new Date(selectedDateObj);
+          nextDay.setDate(nextDay.getDate() + 1);
+          const nextDayStr = nextDay.toISOString().split('T')[0];
+
           const todayAfter4 = orders.filter(o => 
-            o.pickupDate === today && 
+            o.pickupDate === selectedDate && 
             o.pickupTime === '下午4點後' &&
             o.pickupStatus === '未取貨'
           );
 
           const tomorrowBefore4 = orders.filter(o => 
-            o.pickupDate === tomorrow && 
+            o.pickupDate === nextDayStr && 
             o.pickupTime === '下午4點前' &&
             o.pickupStatus === '未取貨'
           );
@@ -1100,7 +1123,7 @@
           });
 
           const handlePrint = () => {
-            const content = generateProductionListContent(todayAfter4, tomorrowBefore4, itemStats);
+            const content = generateProductionListContent(todayAfter4, tomorrowBefore4, itemStats, selectedDate);
             const printWindow = window.open('', '', 'width=800,height=600');
             printWindow.document.write(`
               <html>
@@ -1120,7 +1143,7 @@
             printWindow.print();
           };
 
-          const content = generateProductionListContent(todayAfter4, tomorrowBefore4, itemStats);
+          const content = generateProductionListContent(todayAfter4, tomorrowBefore4, itemStats, selectedDate);
 
           return (
             <div style={{
@@ -1138,22 +1161,41 @@
                 gap: '1rem',
               }}>
                 <h2 style={{ fontSize: '1.8rem', color: '#D4915D', margin: 0 }}>
-                  今日製作清單
+                  製作清單
                 </h2>
-                <button
-                  onClick={handlePrint}
-                  style={{
-                    padding: '0.75rem 1.5rem',
-                    background: '#2196F3',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontSize: '1.1rem',
-                    cursor: 'pointer',
-                  }}
-                >
-                  🖨️ 列印製作清單
-                </button>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                      選擇日期
+                    </label>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={(e) => setSelectedDate(e.target.value)}
+                      style={{
+                        padding: '0.75rem',
+                        fontSize: '1.1rem',
+                        border: '2px solid #E0E0E0',
+                        borderRadius: '8px',
+                      }}
+                    />
+                  </div>
+                  <button
+                    onClick={handlePrint}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      background: '#2196F3',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '1.1rem',
+                      cursor: 'pointer',
+                      marginTop: '1.5rem',
+                    }}
+                  >
+                    🖨️ 列印製作清單
+                  </button>
+                </div>
               </div>
 
               <div style={{
@@ -1171,8 +1213,18 @@
           );
         }
 
-        function generateProductionListContent(todayAfter4, tomorrowBefore4, itemStats) {
-          const today = new Date().toLocaleDateString('zh-TW', { 
+        function generateProductionListContent(todayAfter4, tomorrowBefore4, itemStats, selectedDate) {
+          const displayDate = new Date(selectedDate + 'T12:00:00');
+          const dateStr = displayDate.toLocaleDateString('zh-TW', { 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit',
+            weekday: 'long'
+          });
+          
+          const nextDate = new Date(displayDate);
+          nextDate.setDate(nextDate.getDate() + 1);
+          const nextDateStr = nextDate.toLocaleDateString('zh-TW', { 
             year: 'numeric', 
             month: '2-digit', 
             day: '2-digit',
@@ -1180,12 +1232,12 @@
           });
 
           let content = `================================\n`;
-          content += `      今日製作清單\n`;
-          content += `     ${today}\n`;
+          content += `      製作清單\n`;
+          content += `     ${dateStr}\n`;
           content += `================================\n\n`;
 
           if (todayAfter4.length > 0) {
-            content += `今天下午4點後取貨：\n`;
+            content += `${dateStr.split(' ')[0]} 下午4點後取貨：\n`;
             content += `--------------------------------\n`;
             todayAfter4.forEach(order => {
               content += `${order.customerName} - `;
@@ -1208,7 +1260,7 @@
           }
 
           if (tomorrowBefore4.length > 0) {
-            content += `明天下午4點前取貨：\n`;
+            content += `${nextDateStr.split(' ')[0]} 下午4點前取貨：\n`;
             content += `--------------------------------\n`;
             tomorrowBefore4.forEach(order => {
               content += `${order.customerName} - `;
@@ -1441,7 +1493,7 @@
           content += `尾款：${' '.repeat(Math.max(1, 25 - balanceStr.length))}${balanceStr}\n`;
           content += `--------------------------------\n`;
           
-          content += `取貨日期：${order.pickupDate}\n`;
+          content += `取貨時間：${formatPickupTime(order.pickupDate, order.pickupTime, order.customPickupTime)}\n`;
           content += `取貨人：${order.customerName}\n`;
           content += `電話：${order.phone}\n`;
           content += `--------------------------------\n`;
