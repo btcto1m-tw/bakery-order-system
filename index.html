@@ -58,7 +58,7 @@
         // ============================================
         // 🔧 重要設定：請在此填入您的 Google Apps Script 網址
         // ============================================
-        const GOOGLE_SCRIPT_URL = 'YOUR_GOOGLE_SCRIPT_URL_HERE';
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw35OmDlvLHfjQwJcVPr5M7EMfZEC4OtIDSyt5yhkJu7w2gK9DT8EkEFHfJzVnyRZLd/exec';
         // 範例：'https://script.google.com/macros/s/AKfycby.../exec'
         // ============================================
 
@@ -75,7 +75,7 @@
           { id: 'wusheng-meat', name: '全素魯肉五牲餅', price: 600, note: '全部包素魯肉', hasFillingOption: false },
         ];
 
-        const FILLING_OPTIONS = ['紅豆', '烏豆', '綠豆', '鳳梨', '素魯肉'];
+        const FILLING_OPTIONS = ['紅豆', '烏豆', '綠豆', '鳳梨'];
         const PICKUP_TIMES = ['下午4點前', '下午4點後', '其他'];
 
         // 格式化取貨時間顯示
@@ -1175,11 +1175,11 @@
           // 計算隔天日期（避免時區問題）
           const getNextDay = (dateStr) => {
             const [year, month, day] = dateStr.split('-').map(Number);
-            const date = new Date(year, month - 1, day);
-            date.setDate(date.getDate() + 1);
-            const nextYear = date.getFullYear();
-            const nextMonth = String(date.getMonth() + 1).padStart(2, '0');
-            const nextDay = String(date.getDate()).padStart(2, '0');
+            const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+            date.setUTCDate(date.getUTCDate() + 1);
+            const nextYear = date.getUTCFullYear();
+            const nextMonth = String(date.getUTCMonth() + 1).padStart(2, '0');
+            const nextDay = String(date.getUTCDate()).padStart(2, '0');
             return `${nextYear}-${nextMonth}-${nextDay}`;
           };
 
@@ -1356,21 +1356,22 @@
           // 使用本地時區格式化日期，避免時區問題
           const formatDateLocal = (dateStr) => {
             const [year, month, day] = dateStr.split('-').map(Number);
-            const date = new Date(year, month - 1, day);
+            // 使用 UTC 避免時區問題
+            const date = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
             const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
-            const weekday = weekdays[date.getDay()];
+            const weekday = weekdays[date.getUTCDay()];
             return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')} ${weekday}`;
           };
           
           const selectedDateFormatted = formatDateLocal(selectedDate);
           
-          // 計算隔天
+          // 計算隔天 - 使用 UTC 避免時區問題
           const [year, month, day] = selectedDate.split('-').map(Number);
-          const nextDate = new Date(year, month - 1, day);
-          nextDate.setDate(nextDate.getDate() + 1);
-          const nextYear = nextDate.getFullYear();
-          const nextMonth = String(nextDate.getMonth() + 1).padStart(2, '0');
-          const nextDay = String(nextDate.getDate()).padStart(2, '0');
+          const nextDate = new Date(Date.UTC(year, month - 1, day, 12, 0, 0));
+          nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+          const nextYear = nextDate.getUTCFullYear();
+          const nextMonth = String(nextDate.getUTCMonth() + 1).padStart(2, '0');
+          const nextDay = String(nextDate.getUTCDate()).padStart(2, '0');
           const nextDateStr = `${nextYear}-${nextMonth}-${nextDay}`;
           const nextDateFormatted = formatDateLocal(nextDateStr);
 
