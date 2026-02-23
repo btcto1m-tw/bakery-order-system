@@ -444,7 +444,7 @@
           const [notes, setNotes] = useState(editingOrder?.notes ?? '');
 
           const addWorshipItem = () => {
-            setWorshipItems([...worshipItems, { itemId: '', quantity: 1, filling: '' }]);
+            setWorshipItems([...worshipItems, { itemId: '', quantity: '', filling: '' }]);
           };
 
           const updateWorshipItem = (index, field, value) => {
@@ -458,7 +458,7 @@
           };
 
           const addOtherItem = () => {
-            setOtherItems([...otherItems, { name: '', quantity: 1 }]);
+            setOtherItems([...otherItems, { name: '', quantity: '' }]);
           };
 
           const updateOtherItem = (index, field, value) => {
@@ -536,14 +536,14 @@
                 <Section title="蛋類選項">
                   <div style={{ display: 'flex', gap: '1rem' }}>
                     <RadioButton
-                      checked={hasEgg}
-                      onChange={() => setHasEgg(true)}
-                      label="有蛋"
-                    />
-                    <RadioButton
                       checked={!hasEgg}
                       onChange={() => setHasEgg(false)}
                       label="無蛋"
+                    />
+                    <RadioButton
+                      checked={hasEgg}
+                      onChange={() => setHasEgg(true)}
+                      label="有蛋"
                     />
                   </div>
                 </Section>
@@ -581,6 +581,7 @@
                         value={item.quantity}
                         onChange={(e) => updateWorshipItem(index, 'quantity', e.target.value)}
                         placeholder="數量"
+                        required
                         style={{
                           padding: '0.75rem',
                           fontSize: '1.1rem',
@@ -658,6 +659,7 @@
                         value={item.name}
                         onChange={(e) => updateOtherItem(index, 'name', e.target.value)}
                         placeholder="商品名稱（例如：紅豆麵包）"
+                        required
                         style={{
                           padding: '0.75rem',
                           fontSize: '1.1rem',
@@ -672,6 +674,7 @@
                         value={item.quantity}
                         onChange={(e) => updateOtherItem(index, 'quantity', e.target.value)}
                         placeholder="數量"
+                        required
                         style={{
                           padding: '0.75rem',
                           fontSize: '1.1rem',
