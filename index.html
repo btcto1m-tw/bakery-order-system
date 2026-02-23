@@ -58,7 +58,7 @@
         // ============================================
         // 🔧 重要設定：請在此填入您的 Google Apps Script 網址
         // ============================================
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw35OmDlvLHfjQwJcVPr5M7EMfZEC4OtIDSyt5yhkJu7w2gK9DT8EkEFHfJzVnyRZLd/exec';
+        const GOOGLE_SCRIPT_URL = 'YOUR_GOOGLE_SCRIPT_URL_HERE';
         // 範例：'https://script.google.com/macros/s/AKfycby.../exec'
         // ============================================
 
@@ -625,14 +625,35 @@
                   </button>
                 </Section>
 
-                <Section title="其他商品（自由填寫）">
+                <Section title="其他商品">
                   <textarea
                     value={otherItems}
                     onChange={(e) => setOtherItems(e.target.value)}
-                    placeholder="例如：紅豆麵包 x5
+                    placeholder="請每行一個商品，格式：商品名稱 x數量
+
+例如：
+紅豆麵包 x5
 芋頭麵包 x3
 波蘿麵包 x10"
-                    rows={4}
+                    rows={6}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      fontSize: '1.1rem',
+                      border: '2px solid #E0E0E0',
+                      borderRadius: '8px',
+                      fontFamily: 'inherit',
+                      resize: 'vertical',
+                    }}
+                  />
+                </Section>
+
+                <Section title="備註">
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="特殊需求或注意事項"
+                    rows={3}
                     style={{
                       width: '100%',
                       padding: '0.75rem',
@@ -735,24 +756,6 @@
                       required
                     />
                   </div>
-                </Section>
-
-                <Section title="備註">
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder="特殊需求或注意事項"
-                    rows={3}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      fontSize: '1.1rem',
-                      border: '2px solid #E0E0E0',
-                      borderRadius: '8px',
-                      fontFamily: 'inherit',
-                      resize: 'vertical',
-                    }}
-                  />
                 </Section>
 
                 <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', flexWrap: 'wrap' }}>
@@ -1143,7 +1146,16 @@
               const lines = order.otherItems.split('\n');
               lines.forEach(line => {
                 if (line.trim()) {
-                  itemStats[line.trim()] = (itemStats[line.trim()] || 0) + 1;
+                  // 嘗試解析格式：商品名稱 x數量
+                  const match = line.trim().match(/^(.+?)\s*x\s*(\d+)$/i);
+                  if (match) {
+                    const itemName = match[1].trim();
+                    const quantity = parseInt(match[2]);
+                    itemStats[itemName] = (itemStats[itemName] || 0) + quantity;
+                  } else {
+                    // 如果沒有 x格式，整行當作商品名稱，數量為 1
+                    itemStats[line.trim()] = (itemStats[line.trim()] || 0) + 1;
+                  }
                 }
               });
             }
