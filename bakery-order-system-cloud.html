@@ -1,0 +1,1550 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>進發素食麵包店 訂單系統（雲端版）</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        .loading-spinner {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #D4915D;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // ============================================
+        // 🔧 重要設定：請在此填入您的 Google Apps Script 網址
+        // ============================================
+        const GOOGLE_SCRIPT_URL = 'YOUR_GOOGLE_SCRIPT_URL_HERE';
+        // 範例：'https://script.google.com/macros/s/AKfycby.../exec'
+        // ============================================
+
+        // 拜拜用品商品清單
+        const WORSHIP_ITEMS = [
+          { id: 'sansheng-bread', name: '三牲麵包', price: 190, note: '內餡：香甜葡萄乾', hasFillingOption: false },
+          { id: 'wusheng-bread', name: '五牲麵包', price: 260, note: '內餡：香甜葡萄乾', hasFillingOption: false },
+          { id: 'sansheng-cake', name: '三牲餅', price: 360, note: '公版內餡：烏豆沙 + 綠豆沙 + 鳳梨', hasFillingOption: true },
+          { id: 'wusheng-cake', name: '五牲餅', price: 540, note: '公版內餡：烏豆沙 + 綠豆沙 + 鳳梨', hasFillingOption: true },
+          { id: 'peach-bread', name: '壽桃麵包', price: 30, note: '無包內餡', hasFillingOption: false },
+          { id: 'peach-cake-bean', name: '壽桃餅（豆沙餡）', price: 30, note: '', hasFillingOption: false },
+          { id: 'peach-cake-meat', name: '壽桃餅（素魯肉）', price: 35, note: '', hasFillingOption: false },
+          { id: 'sansheng-meat', name: '全素魯肉三牲餅', price: 400, note: '全部包素魯肉', hasFillingOption: false },
+          { id: 'wusheng-meat', name: '全素魯肉五牲餅', price: 600, note: '全部包素魯肉', hasFillingOption: false },
+        ];
+
+        const FILLING_OPTIONS = ['紅豆', '烏豆', '綠豆', '鳳梨', '素魯肉'];
+        const PICKUP_TIMES = ['下午4點前', '下午4點後', '其他'];
+
+        // 生成訂單編號
+        const generateOrderId = () => {
+          const date = new Date();
+          const dateStr = date.toISOString().slice(0, 10).replace(/-/g, '');
+          const timeStr = date.getTime().toString().slice(-4);
+          return `${dateStr}-${timeStr}`;
+        };
+
+        // Google Sheets API 函數
+        const fetchOrders = async () => {
+          if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL === 'YOUR_GOOGLE_SCRIPT_URL_HERE') {
+            throw new Error('請先設定 Google Apps Script URL');
+          }
+          
+          const response = await fetch(GOOGLE_SCRIPT_URL);
+          const data = await response.json();
+          
+          if (!data.success) {
+            throw new Error(data.error || '讀取訂單失敗');
+          }
+          
+          return data.orders;
+        };
+
+        const saveOrder = async (order) => {
+          if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL === 'YOUR_GOOGLE_SCRIPT_URL_HERE') {
+            throw new Error('請先設定 Google Apps Script URL');
+          }
+          
+          const response = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'add',
+              order: order
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (!data.success) {
+            throw new Error(data.error || '儲存訂單失敗');
+          }
+          
+          return data;
+        };
+
+        const updateOrderAPI = async (order) => {
+          if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL === 'YOUR_GOOGLE_SCRIPT_URL_HERE') {
+            throw new Error('請先設定 Google Apps Script URL');
+          }
+          
+          const response = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'update',
+              order: order
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (!data.success) {
+            throw new Error(data.error || '更新訂單失敗');
+          }
+          
+          return data;
+        };
+
+        const deleteOrderAPI = async (orderId) => {
+          if (!GOOGLE_SCRIPT_URL || GOOGLE_SCRIPT_URL === 'YOUR_GOOGLE_SCRIPT_URL_HERE') {
+            throw new Error('請先設定 Google Apps Script URL');
+          }
+          
+          const response = await fetch(GOOGLE_SCRIPT_URL, {
+            method: 'POST',
+            body: JSON.stringify({
+              action: 'delete',
+              orderId: orderId
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (!data.success) {
+            throw new Error(data.error || '刪除訂單失敗');
+          }
+          
+          return data;
+        };
+
+        // 載入中畫面元件
+        function LoadingOverlay({ message = '處理中...' }) {
+          return (
+            <div className="loading-overlay">
+              <div className="loading-spinner">
+                <div className="spinner"></div>
+                <div>{message}</div>
+              </div>
+            </div>
+          );
+        }
+
+        // 主應用程式
+        function BakeryOrderSystem() {
+          const [currentView, setCurrentView] = useState('new-order');
+          const [orders, setOrders] = useState([]);
+          const [editingOrder, setEditingOrder] = useState(null);
+          const [loading, setLoading] = useState(false);
+          const [loadingMessage, setLoadingMessage] = useState('');
+          const [error, setError] = useState('');
+
+          // 載入訂單
+          const loadOrders = async () => {
+            try {
+              setLoading(true);
+              setLoadingMessage('載入訂單資料...');
+              const orders = await fetchOrders();
+              setOrders(orders);
+              setError('');
+            } catch (err) {
+              setError(err.message);
+              alert('載入訂單失敗：' + err.message);
+            } finally {
+              setLoading(false);
+            }
+          };
+
+          // 初始載入
+          useEffect(() => {
+            loadOrders();
+          }, []);
+
+          const addOrder = async (order) => {
+            try {
+              setLoading(true);
+              setLoadingMessage('儲存訂單...');
+              await saveOrder(order);
+              await loadOrders();
+            } catch (err) {
+              alert('新增訂單失敗：' + err.message);
+            } finally {
+              setLoading(false);
+            }
+          };
+
+          const updateOrder = async (order) => {
+            try {
+              setLoading(true);
+              setLoadingMessage('更新訂單...');
+              await updateOrderAPI(order);
+              await loadOrders();
+            } catch (err) {
+              alert('更新訂單失敗：' + err.message);
+            } finally {
+              setLoading(false);
+            }
+          };
+
+          const deleteOrder = async (orderId) => {
+            if (window.confirm('確定要刪除此訂單嗎？')) {
+              try {
+                setLoading(true);
+                setLoadingMessage('刪除訂單...');
+                await deleteOrderAPI(orderId);
+                await loadOrders();
+              } catch (err) {
+                alert('刪除訂單失敗：' + err.message);
+              } finally {
+                setLoading(false);
+              }
+            }
+          };
+
+          return (
+            <div style={{
+              minHeight: '100vh',
+              background: 'linear-gradient(135deg, #FFF8E7 0%, #FFE8CC 100%)',
+            }}>
+              {loading && <LoadingOverlay message={loadingMessage} />}
+              
+              <nav style={{
+                background: '#D4915D',
+                padding: '1rem 2rem',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              }}>
+                <div style={{
+                  maxWidth: '1400px',
+                  margin: '0 auto',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '2rem',
+                  flexWrap: 'wrap',
+                }}>
+                  <h1 style={{
+                    fontSize: '1.8rem',
+                    fontWeight: 'bold',
+                    color: 'white',
+                    letterSpacing: '0.05em',
+                  }}>
+                    進發素食麵包店 訂單系統 ☁️
+                  </h1>
+                  <div style={{ display: 'flex', gap: '0.5rem', marginLeft: 'auto', flexWrap: 'wrap' }}>
+                    <NavButton
+                      active={currentView === 'new-order'}
+                      onClick={() => setCurrentView('new-order')}
+                    >
+                      ➕ 新增訂單
+                    </NavButton>
+                    <NavButton
+                      active={currentView === 'order-list'}
+                      onClick={() => setCurrentView('order-list')}
+                    >
+                      🔍 訂單管理
+                    </NavButton>
+                    <NavButton
+                      active={currentView === 'production-list'}
+                      onClick={() => setCurrentView('production-list')}
+                    >
+                      📦 製作清單
+                    </NavButton>
+                    <NavButton
+                      active={currentView === 'statistics'}
+                      onClick={() => setCurrentView('statistics')}
+                    >
+                      📊 商品統計
+                    </NavButton>
+                    <button
+                      onClick={loadOrders}
+                      style={{
+                        padding: '0.75rem 1.5rem',
+                        background: 'rgba(255,255,255,0.2)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '1rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      🔄 重新載入
+                    </button>
+                  </div>
+                </div>
+              </nav>
+
+              {error && (
+                <div style={{
+                  maxWidth: '1400px',
+                  margin: '1rem auto',
+                  padding: '1rem 2rem',
+                  background: '#FFEBEE',
+                  color: '#C62828',
+                  borderRadius: '8px',
+                }}>
+                  ⚠️ {error}
+                </div>
+              )}
+
+              <main style={{
+                maxWidth: '1400px',
+                margin: '2rem auto',
+                padding: '0 2rem',
+              }}>
+                {currentView === 'new-order' && (
+                  <NewOrderForm
+                    onSubmit={async (order) => {
+                      if (editingOrder) {
+                        await updateOrder(order);
+                        setEditingOrder(null);
+                      } else {
+                        await addOrder(order);
+                      }
+                      setCurrentView('order-list');
+                    }}
+                    editingOrder={editingOrder}
+                    onCancel={() => {
+                      setEditingOrder(null);
+                      setCurrentView('order-list');
+                    }}
+                  />
+                )}
+                {currentView === 'order-list' && (
+                  <OrderList
+                    orders={orders}
+                    onEdit={(order) => {
+                      setEditingOrder(order);
+                      setCurrentView('new-order');
+                    }}
+                    onDelete={deleteOrder}
+                    onUpdateStatus={async (orderId, status) => {
+                      const order = orders.find(o => o.id === orderId);
+                      await updateOrder({ ...order, pickupStatus: status });
+                    }}
+                  />
+                )}
+                {currentView === 'production-list' && (
+                  <ProductionList orders={orders} />
+                )}
+                {currentView === 'statistics' && (
+                  <Statistics orders={orders} />
+                )}
+              </main>
+            </div>
+          );
+        }
+
+        function NavButton({ active, onClick, children }) {
+          return (
+            <button
+              onClick={onClick}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.75rem 1.5rem',
+                background: active ? 'white' : 'rgba(255,255,255,0.2)',
+                color: active ? '#D4915D' : 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '1rem',
+                fontWeight: active ? 'bold' : 'normal',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+              }}
+            >
+              {children}
+            </button>
+          );
+        }
+
+        // 以下元件與原本相同，僅列出關鍵部分
+        // （為了節省篇幅，這裡使用原本的元件程式碼）
+
+        function NewOrderForm({ onSubmit, editingOrder, onCancel }) {
+          const [hasEgg, setHasEgg] = useState(editingOrder?.hasEgg ?? true);
+          const [worshipItems, setWorshipItems] = useState(editingOrder?.worshipItems ?? []);
+          const [otherItems, setOtherItems] = useState(editingOrder?.otherItems ?? '');
+          const [totalAmount, setTotalAmount] = useState(editingOrder?.totalAmount ?? 0);
+          const [deposit, setDeposit] = useState(editingOrder?.deposit ?? 0);
+          const [pickupDate, setPickupDate] = useState(editingOrder?.pickupDate ?? '');
+          const [pickupTime, setPickupTime] = useState(editingOrder?.pickupTime ?? '下午4點後');
+          const [customPickupTime, setCustomPickupTime] = useState(editingOrder?.customPickupTime ?? '');
+          const [customerName, setCustomerName] = useState(editingOrder?.customerName ?? '');
+          const [phone, setPhone] = useState(editingOrder?.phone ?? '');
+          const [notes, setNotes] = useState(editingOrder?.notes ?? '');
+
+          const addWorshipItem = () => {
+            setWorshipItems([...worshipItems, { itemId: '', quantity: 1, filling: '' }]);
+          };
+
+          const updateWorshipItem = (index, field, value) => {
+            const updated = [...worshipItems];
+            updated[index] = { ...updated[index], [field]: value };
+            setWorshipItems(updated);
+          };
+
+          const removeWorshipItem = (index) => {
+            setWorshipItems(worshipItems.filter((_, i) => i !== index));
+          };
+
+          const handleSubmit = (e) => {
+            e.preventDefault();
+            
+            if (!customerName || !phone || !pickupDate) {
+              alert('請填寫客戶姓名、電話和取貨日期');
+              return;
+            }
+
+            const order = {
+              id: editingOrder?.id || generateOrderId(),
+              createdAt: editingOrder?.createdAt || new Date().toISOString(),
+              hasEgg,
+              worshipItems,
+              otherItems,
+              totalAmount: Number(totalAmount),
+              deposit: Number(deposit),
+              paymentStatus: deposit >= totalAmount ? '已付清' : deposit > 0 ? '已付訂金' : '未付款',
+              pickupDate,
+              pickupTime,
+              customPickupTime: pickupTime === '其他' ? customPickupTime : '',
+              customerName,
+              phone,
+              notes,
+              pickupStatus: editingOrder?.pickupStatus || '未取貨',
+            };
+
+            onSubmit(order);
+          };
+
+          return (
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '2rem',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '2rem',
+              }}>
+                <h2 style={{ fontSize: '1.8rem', color: '#D4915D' }}>
+                  {editingOrder ? '編輯訂單' : '新增訂單'}
+                </h2>
+                {editingOrder && (
+                  <button
+                    onClick={onCancel}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: '#f0f0f0',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    取消編輯
+                  </button>
+                )}
+              </div>
+
+              <form onSubmit={handleSubmit}>
+                <Section title="蛋類選項">
+                  <div style={{ display: 'flex', gap: '1rem' }}>
+                    <RadioButton
+                      checked={hasEgg}
+                      onChange={() => setHasEgg(true)}
+                      label="有蛋"
+                    />
+                    <RadioButton
+                      checked={!hasEgg}
+                      onChange={() => setHasEgg(false)}
+                      label="無蛋"
+                    />
+                  </div>
+                </Section>
+
+                <Section title="拜拜用品">
+                  {worshipItems.map((item, index) => (
+                    <div key={index} style={{
+                      display: 'grid',
+                      gridTemplateColumns: '2fr 1fr 1.5fr auto',
+                      gap: '1rem',
+                      marginBottom: '1rem',
+                      alignItems: 'start',
+                    }}>
+                      <select
+                        value={item.itemId}
+                        onChange={(e) => updateWorshipItem(index, 'itemId', e.target.value)}
+                        style={{
+                          padding: '0.75rem',
+                          fontSize: '1.1rem',
+                          border: '2px solid #E0E0E0',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        <option value="">選擇商品</option>
+                        {WORSHIP_ITEMS.map(wi => (
+                          <option key={wi.id} value={wi.id}>
+                            {wi.name} - ${wi.price} {wi.note && `(${wi.note})`}
+                          </option>
+                        ))}
+                      </select>
+
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => updateWorshipItem(index, 'quantity', e.target.value)}
+                        placeholder="數量"
+                        style={{
+                          padding: '0.75rem',
+                          fontSize: '1.1rem',
+                          border: '2px solid #E0E0E0',
+                          borderRadius: '8px',
+                        }}
+                      />
+
+                      {item.itemId && WORSHIP_ITEMS.find(w => w.id === item.itemId)?.hasFillingOption && (
+                        <select
+                          value={item.filling}
+                          onChange={(e) => updateWorshipItem(index, 'filling', e.target.value)}
+                          style={{
+                            padding: '0.75rem',
+                            fontSize: '1.1rem',
+                            border: '2px solid #E0E0E0',
+                            borderRadius: '8px',
+                          }}
+                        >
+                          <option value="">公版內餡</option>
+                          {FILLING_OPTIONS.map(f => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </select>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => removeWorshipItem(index)}
+                        style={{
+                          padding: '0.75rem',
+                          background: '#FF6B6B',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={addWorshipItem}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.75rem 1.5rem',
+                      background: '#D4915D',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '1.1rem',
+                      cursor: 'pointer',
+                      marginTop: '1rem',
+                    }}
+                  >
+                    ➕ 新增拜拜用品
+                  </button>
+                </Section>
+
+                <Section title="其他商品（自由填寫）">
+                  <textarea
+                    value={otherItems}
+                    onChange={(e) => setOtherItems(e.target.value)}
+                    placeholder="例如：紅豆麵包 x5
+芋頭麵包 x3
+波蘿麵包 x10"
+                    rows={4}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      fontSize: '1.1rem',
+                      border: '2px solid #E0E0E0',
+                      borderRadius: '8px',
+                      fontFamily: 'inherit',
+                      resize: 'vertical',
+                    }}
+                  />
+                </Section>
+
+                <Section title="金額資訊">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <Input
+                      label="總金額"
+                      type="number"
+                      value={totalAmount}
+                      onChange={(e) => setTotalAmount(e.target.value)}
+                      placeholder="0"
+                    />
+                    <Input
+                      label="訂金"
+                      type="number"
+                      value={deposit}
+                      onChange={(e) => setDeposit(e.target.value)}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div style={{
+                    marginTop: '1rem',
+                    padding: '1rem',
+                    background: '#FFF8E7',
+                    borderRadius: '8px',
+                    fontSize: '1.2rem',
+                  }}>
+                    <strong>尾款：${totalAmount - deposit}</strong>
+                    <span style={{ marginLeft: '2rem', color: '#666' }}>
+                      付款狀態：{deposit >= totalAmount ? '✓ 已付清' : deposit > 0 ? '○ 已付訂金' : '✗ 未付款'}
+                    </span>
+                  </div>
+                </Section>
+
+                <Section title="取貨資訊">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                    <Input
+                      label="取貨日期"
+                      type="date"
+                      value={pickupDate}
+                      onChange={(e) => setPickupDate(e.target.value)}
+                    />
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                        取貨時段
+                      </label>
+                      <select
+                        value={pickupTime}
+                        onChange={(e) => setPickupTime(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '0.75rem',
+                          fontSize: '1.1rem',
+                          border: '2px solid #E0E0E0',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        {PICKUP_TIMES.map(time => (
+                          <option key={time} value={time}>{time}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {pickupTime === '其他' && (
+                    <Input
+                      label="指定取貨時間"
+                      type="text"
+                      value={customPickupTime}
+                      onChange={(e) => setCustomPickupTime(e.target.value)}
+                      placeholder="例如：晚上8點"
+                    />
+                  )}
+                </Section>
+
+                <Section title="客戶資訊">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <Input
+                      label="取貨人姓名"
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="王小明"
+                      required
+                    />
+                    <Input
+                      label="電話"
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="0912-345-678"
+                      required
+                    />
+                  </div>
+                </Section>
+
+                <Section title="備註">
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="特殊需求或注意事項"
+                    rows={3}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      fontSize: '1.1rem',
+                      border: '2px solid #E0E0E0',
+                      borderRadius: '8px',
+                      fontFamily: 'inherit',
+                      resize: 'vertical',
+                    }}
+                  />
+                </Section>
+
+                <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', flexWrap: 'wrap' }}>
+                  <button
+                    type="submit"
+                    style={{
+                      flex: 1,
+                      minWidth: '200px',
+                      padding: '1rem 2rem',
+                      background: '#4CAF50',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '1.3rem',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {editingOrder ? '更新訂單' : '建立訂單'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      printReceipt({
+                        id: generateOrderId(),
+                        createdAt: new Date().toISOString(),
+                        hasEgg,
+                        worshipItems,
+                        otherItems,
+                        totalAmount: Number(totalAmount),
+                        deposit: Number(deposit),
+                        pickupDate,
+                        pickupTime,
+                        customPickupTime: pickupTime === '其他' ? customPickupTime : '',
+                        customerName,
+                        phone,
+                        notes,
+                      });
+                    }}
+                    style={{
+                      padding: '1rem 2rem',
+                      background: '#2196F3',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '1.3rem',
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🖨️ 預覽收據
+                  </button>
+                </div>
+              </form>
+            </div>
+          );
+        }
+
+        // OrderList, ProductionList, Statistics 等元件與原本相同
+        // 為了檔案大小，這裡省略，實際使用時請複製完整程式碼
+
+        function OrderList({ orders, onEdit, onDelete, onUpdateStatus }) {
+          const [searchTerm, setSearchTerm] = useState('');
+          const [filterDate, setFilterDate] = useState('');
+          const [filterStatus, setFilterStatus] = useState('all');
+
+          const filteredOrders = orders.filter(order => {
+            const matchSearch = !searchTerm || 
+              order.customerName.includes(searchTerm) ||
+              order.phone.includes(searchTerm) ||
+              order.id.includes(searchTerm);
+            
+            const matchDate = !filterDate || order.pickupDate === filterDate;
+            const matchStatus = filterStatus === 'all' || order.pickupStatus === filterStatus;
+
+            return matchSearch && matchDate && matchStatus;
+          });
+
+          const sortedOrders = [...filteredOrders].sort((a, b) => 
+            new Date(b.createdAt) - new Date(a.createdAt)
+          );
+
+          return (
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '2rem',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            }}>
+              <h2 style={{ fontSize: '1.8rem', color: '#D4915D', marginBottom: '2rem' }}>
+                訂單管理
+              </h2>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '2fr 1fr 1fr',
+                gap: '1rem',
+                marginBottom: '2rem',
+              }}>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="搜尋客戶姓名、電話或訂單編號..."
+                  style={{
+                    padding: '0.75rem',
+                    fontSize: '1.1rem',
+                    border: '2px solid #E0E0E0',
+                    borderRadius: '8px',
+                  }}
+                />
+                <input
+                  type="date"
+                  value={filterDate}
+                  onChange={(e) => setFilterDate(e.target.value)}
+                  style={{
+                    padding: '0.75rem',
+                    fontSize: '1.1rem',
+                    border: '2px solid #E0E0E0',
+                    borderRadius: '8px',
+                  }}
+                />
+                <select
+                  value={filterStatus}
+                  onChange={(e) => setFilterStatus(e.target.value)}
+                  style={{
+                    padding: '0.75rem',
+                    fontSize: '1.1rem',
+                    border: '2px solid #E0E0E0',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <option value="all">全部狀態</option>
+                  <option value="未取貨">未取貨</option>
+                  <option value="已取貨">已取貨</option>
+                  <option value="已取消">已取消</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {sortedOrders.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '3rem', color: '#999', fontSize: '1.2rem' }}>
+                    沒有找到訂單
+                  </div>
+                ) : (
+                  sortedOrders.map(order => (
+                    <OrderCard
+                      key={order.id}
+                      order={order}
+                      onEdit={() => onEdit(order)}
+                      onDelete={() => onDelete(order.id)}
+                      onPrint={() => printReceipt(order)}
+                      onUpdateStatus={(status) => onUpdateStatus(order.id, status)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        function OrderCard({ order, onEdit, onDelete, onPrint, onUpdateStatus }) {
+          const isOverdue = order.pickupStatus === '未取貨' && new Date(order.pickupDate) < new Date();
+
+          return (
+            <div style={{
+              border: `2px solid ${isOverdue ? '#FF6B6B' : '#E0E0E0'}`,
+              borderRadius: '8px',
+              padding: '1.5rem',
+              background: isOverdue ? '#FFF0F0' : 'white',
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', flexWrap: 'wrap', gap: '1rem' }}>
+                <div style={{ flex: 1, minWidth: '300px' }}>
+                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                    <span style={{
+                      padding: '0.25rem 0.75rem',
+                      background: order.hasEgg ? '#FFE5B4' : '#E8F5E9',
+                      borderRadius: '4px',
+                      fontSize: '0.9rem',
+                      fontWeight: 'bold',
+                    }}>
+                      {order.hasEgg ? '有蛋' : '無蛋'}
+                    </span>
+                    <span style={{
+                      padding: '0.25rem 0.75rem',
+                      background: order.pickupStatus === '已取貨' ? '#C8E6C9' : 
+                                  order.pickupStatus === '已取消' ? '#FFCDD2' : '#FFF9C4',
+                      borderRadius: '4px',
+                      fontSize: '0.9rem',
+                      fontWeight: 'bold',
+                    }}>
+                      {order.pickupStatus}
+                    </span>
+                    <span style={{
+                      padding: '0.25rem 0.75rem',
+                      background: order.paymentStatus === '已付清' ? '#C8E6C9' :
+                                  order.paymentStatus === '已付訂金' ? '#FFF9C4' : '#FFCDD2',
+                      borderRadius: '4px',
+                      fontSize: '0.9rem',
+                      fontWeight: 'bold',
+                    }}>
+                      {order.paymentStatus}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: '1.1rem', lineHeight: '1.8' }}>
+                    <div><strong>訂單編號：</strong>{order.id}</div>
+                    <div><strong>取貨人：</strong>{order.customerName} | {order.phone}</div>
+                    <div>
+                      <strong>取貨時間：</strong>
+                      {order.pickupDate} {order.pickupTime}
+                      {order.customPickupTime && ` (${order.customPickupTime})`}
+                    </div>
+                    <div><strong>總金額：</strong>${order.totalAmount} | <strong>訂金：</strong>${order.deposit} | <strong>尾款：</strong>${order.totalAmount - order.deposit}</div>
+                    
+                    {order.worshipItems && order.worshipItems.length > 0 && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <strong>拜拜用品：</strong>
+                        {order.worshipItems.map((item, idx) => {
+                          const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
+                          return itemInfo ? (
+                            <span key={idx}>
+                              {itemInfo.name} x{item.quantity}
+                              {item.filling && ` (${item.filling})`}
+                              {idx < order.worshipItems.length - 1 ? '、' : ''}
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
+                    
+                    {order.otherItems && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <strong>其他商品：</strong>
+                        <pre style={{ 
+                          display: 'inline',
+                          whiteSpace: 'pre-wrap',
+                          fontFamily: 'inherit',
+                          margin: 0,
+                        }}>
+                          {order.otherItems}
+                        </pre>
+                      </div>
+                    )}
+                    
+                    {order.notes && (
+                      <div style={{ marginTop: '0.5rem' }}>
+                        <strong>備註：</strong>{order.notes}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
+                  {order.pickupStatus === '未取貨' && (
+                    <button
+                      onClick={() => onUpdateStatus('已取貨')}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        background: '#4CAF50',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                      }}
+                    >
+                      標記已取貨
+                    </button>
+                  )}
+                  <button
+                    onClick={onPrint}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: '#2196F3',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '1rem',
+                    }}
+                  >
+                    🖨️ 列印
+                  </button>
+                  <button
+                    onClick={onEdit}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: '#FF9800',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '1rem',
+                    }}
+                  >
+                    編輯
+                  </button>
+                  <button
+                    onClick={onDelete}
+                    style={{
+                      padding: '0.5rem 1rem',
+                      background: '#F44336',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '1rem',
+                    }}
+                  >
+                    刪除
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        function ProductionList({ orders }) {
+          const today = new Date().toISOString().split('T')[0];
+          const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
+          const todayAfter4 = orders.filter(o => 
+            o.pickupDate === today && 
+            o.pickupTime === '下午4點後' &&
+            o.pickupStatus === '未取貨'
+          );
+
+          const tomorrowBefore4 = orders.filter(o => 
+            o.pickupDate === tomorrow && 
+            o.pickupTime === '下午4點前' &&
+            o.pickupStatus === '未取貨'
+          );
+
+          const allProductionOrders = [...todayAfter4, ...tomorrowBefore4];
+
+          const itemStats = {};
+          
+          allProductionOrders.forEach(order => {
+            if (order.worshipItems) {
+              order.worshipItems.forEach(item => {
+                const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
+                if (itemInfo) {
+                  const key = item.filling ? 
+                    `${itemInfo.name} (${item.filling})` : 
+                    itemInfo.name;
+                  itemStats[key] = (itemStats[key] || 0) + Number(item.quantity);
+                }
+              });
+            }
+
+            if (order.otherItems) {
+              const lines = order.otherItems.split('\n');
+              lines.forEach(line => {
+                if (line.trim()) {
+                  itemStats[line.trim()] = (itemStats[line.trim()] || 0) + 1;
+                }
+              });
+            }
+          });
+
+          const handlePrint = () => {
+            const content = generateProductionListContent(todayAfter4, tomorrowBefore4, itemStats);
+            const printWindow = window.open('', '', 'width=800,height=600');
+            printWindow.document.write(`
+              <html>
+                <head>
+                  <title>製作清單</title>
+                  <style>
+                    body { font-family: monospace; white-space: pre; font-size: 14px; }
+                    @media print {
+                      body { margin: 0; padding: 20px; }
+                    }
+                  </style>
+                </head>
+                <body>${content}</body>
+              </html>
+            `);
+            printWindow.document.close();
+            printWindow.print();
+          };
+
+          const content = generateProductionListContent(todayAfter4, tomorrowBefore4, itemStats);
+
+          return (
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '2rem',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: '2rem',
+                flexWrap: 'wrap',
+                gap: '1rem',
+              }}>
+                <h2 style={{ fontSize: '1.8rem', color: '#D4915D', margin: 0 }}>
+                  今日製作清單
+                </h2>
+                <button
+                  onClick={handlePrint}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    background: '#2196F3',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '1.1rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  🖨️ 列印製作清單
+                </button>
+              </div>
+
+              <div style={{
+                background: '#FFF8E7',
+                padding: '1.5rem',
+                borderRadius: '8px',
+                fontFamily: 'monospace',
+                fontSize: '1.1rem',
+                lineHeight: '1.8',
+                whiteSpace: 'pre-wrap',
+              }}>
+                {content}
+              </div>
+            </div>
+          );
+        }
+
+        function generateProductionListContent(todayAfter4, tomorrowBefore4, itemStats) {
+          const today = new Date().toLocaleDateString('zh-TW', { 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit',
+            weekday: 'long'
+          });
+
+          let content = `================================\n`;
+          content += `      今日製作清單\n`;
+          content += `     ${today}\n`;
+          content += `================================\n\n`;
+
+          if (todayAfter4.length > 0) {
+            content += `今天下午4點後取貨：\n`;
+            content += `--------------------------------\n`;
+            todayAfter4.forEach(order => {
+              content += `${order.customerName} - `;
+              if (order.worshipItems) {
+                order.worshipItems.forEach(item => {
+                  const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
+                  if (itemInfo) {
+                    content += `${itemInfo.name} x${item.quantity}`;
+                    if (item.filling) content += ` (${item.filling})`;
+                    content += ' ';
+                  }
+                });
+              }
+              if (order.otherItems) {
+                content += order.otherItems.replace(/\n/g, ' ');
+              }
+              content += '\n';
+            });
+            content += '\n';
+          }
+
+          if (tomorrowBefore4.length > 0) {
+            content += `明天下午4點前取貨：\n`;
+            content += `--------------------------------\n`;
+            tomorrowBefore4.forEach(order => {
+              content += `${order.customerName} - `;
+              if (order.worshipItems) {
+                order.worshipItems.forEach(item => {
+                  const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
+                  if (itemInfo) {
+                    content += `${itemInfo.name} x${item.quantity}`;
+                    if (item.filling) content += ` (${item.filling})`;
+                    content += ' ';
+                  }
+                });
+              }
+              if (order.otherItems) {
+                content += order.otherItems.replace(/\n/g, ' ');
+              }
+              content += '\n';
+            });
+            content += '\n';
+          }
+
+          content += `================================\n`;
+          content += `總計：\n`;
+          content += `================================\n`;
+          Object.entries(itemStats).forEach(([item, count]) => {
+            const dots = '.'.repeat(Math.max(2, 30 - item.length - String(count).length));
+            content += `${item} ${dots} ${count}\n`;
+          });
+          content += `================================\n`;
+
+          return content;
+        }
+
+        function Statistics({ orders }) {
+          const [startDate, setStartDate] = useState('');
+          const [endDate, setEndDate] = useState('');
+          const [selectedTime, setSelectedTime] = useState('all');
+
+          const filteredOrders = orders.filter(order => {
+            const matchDate = (!startDate || order.pickupDate >= startDate) &&
+                             (!endDate || order.pickupDate <= endDate);
+            const matchTime = selectedTime === 'all' || order.pickupTime === selectedTime;
+            return matchDate && matchTime && order.pickupStatus !== '已取消';
+          });
+
+          const itemStats = {};
+          filteredOrders.forEach(order => {
+            if (order.worshipItems) {
+              order.worshipItems.forEach(item => {
+                const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
+                if (itemInfo) {
+                  const key = item.filling ? 
+                    `${itemInfo.name} (${item.filling})` : 
+                    itemInfo.name;
+                  itemStats[key] = (itemStats[key] || 0) + Number(item.quantity);
+                }
+              });
+            }
+          });
+
+          const sortedStats = Object.entries(itemStats).sort((a, b) => b[1] - a[1]);
+
+          const handlePrint = () => {
+            const content = generateStatisticsContent(startDate, endDate, selectedTime, sortedStats);
+            const printWindow = window.open('', '', 'width=800,height=600');
+            printWindow.document.write(`
+              <html>
+                <head>
+                  <title>商品統計</title>
+                  <style>
+                    body { font-family: monospace; white-space: pre; font-size: 14px; }
+                    @media print {
+                      body { margin: 0; padding: 20px; }
+                    }
+                  </style>
+                </head>
+                <body>${content}</body>
+              </html>
+            `);
+            printWindow.document.close();
+            printWindow.print();
+          };
+
+          return (
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '2rem',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            }}>
+              <h2 style={{ fontSize: '1.8rem', color: '#D4915D', marginBottom: '2rem' }}>
+                商品統計
+              </h2>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr 1fr auto',
+                gap: '1rem',
+                marginBottom: '2rem',
+              }}>
+                <Input
+                  label="開始日期"
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+                <Input
+                  label="結束日期"
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+                <div>
+                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                    取貨時段
+                  </label>
+                  <select
+                    value={selectedTime}
+                    onChange={(e) => setSelectedTime(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      fontSize: '1.1rem',
+                      border: '2px solid #E0E0E0',
+                      borderRadius: '8px',
+                    }}
+                  >
+                    <option value="all">全部時段</option>
+                    <option value="下午4點前">下午4點前</option>
+                    <option value="下午4點後">下午4點後</option>
+                  </select>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <button
+                    onClick={handlePrint}
+                    style={{
+                      padding: '0.75rem 1.5rem',
+                      background: '#2196F3',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '8px',
+                      fontSize: '1.1rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🖨️ 列印
+                  </button>
+                </div>
+              </div>
+
+              <div style={{
+                background: '#FFF8E7',
+                padding: '1.5rem',
+                borderRadius: '8px',
+              }}>
+                <div style={{
+                  fontFamily: 'monospace',
+                  fontSize: '1.1rem',
+                  lineHeight: '1.8',
+                  whiteSpace: 'pre-wrap',
+                }}>
+                  {generateStatisticsContent(startDate, endDate, selectedTime, sortedStats)}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        function generateStatisticsContent(startDate, endDate, selectedTime, sortedStats) {
+          let content = `統計期間：${startDate || '不限'} ~ ${endDate || '不限'}\n`;
+          content += `取貨時段：${selectedTime === 'all' ? '全部' : selectedTime}\n`;
+          content += `--------------------------------\n`;
+          
+          if (sortedStats.length === 0) {
+            content += `無資料\n`;
+          } else {
+            sortedStats.forEach(([item, count]) => {
+              const dots = '.'.repeat(Math.max(2, 35 - item.length - String(count).length));
+              content += `${item} ${dots} ${count}\n`;
+            });
+          }
+          
+          content += `================================\n`;
+
+          return content;
+        }
+
+        function printReceipt(order) {
+          let content = `================================\n`;
+          content += `      進發素食麵包店\n`;
+          content += `      訂購收據\n`;
+          content += `================================\n`;
+          content += `訂購內容\n`;
+          
+          if (order.worshipItems) {
+            order.worshipItems.forEach(item => {
+              const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
+              if (itemInfo) {
+                const name = item.filling ? 
+                  `${itemInfo.name} (${item.filling}) x${item.quantity}` : 
+                  `${itemInfo.name} x${item.quantity}`;
+                const price = `$${itemInfo.price * item.quantity}`;
+                const spaces = ' '.repeat(Math.max(1, 32 - name.length - price.length));
+                content += `${name}${spaces}${price}\n`;
+              }
+            });
+          }
+
+          if (order.otherItems) {
+            const lines = order.otherItems.split('\n');
+            lines.forEach(line => {
+              if (line.trim()) {
+                content += `${line.trim()}\n`;
+              }
+            });
+          }
+
+          if (order.notes) {
+            content += `備註：${order.notes}\n`;
+          }
+
+          content += `--------------------------------\n`;
+          
+          const totalStr = `$${order.totalAmount}`;
+          const depositStr = `$${order.deposit}`;
+          const balanceStr = `$${order.totalAmount - order.deposit}`;
+          
+          content += `總金額：${' '.repeat(Math.max(1, 23 - totalStr.length))}${totalStr}\n`;
+          content += `訂金：${' '.repeat(Math.max(1, 25 - depositStr.length))}${depositStr}\n`;
+          content += `尾款：${' '.repeat(Math.max(1, 25 - balanceStr.length))}${balanceStr}\n`;
+          content += `--------------------------------\n`;
+          
+          content += `取貨日期：${order.pickupDate}\n`;
+          content += `取貨人：${order.customerName}\n`;
+          content += `電話：${order.phone}\n`;
+          content += `--------------------------------\n`;
+          content += `訂單編號：${order.id}\n`;
+          content += `訂購時間：${new Date(order.createdAt).toLocaleString('zh-TW')}\n`;
+          content += `================================\n`;
+
+          const printWindow = window.open('', '', 'width=400,height=600');
+          printWindow.document.write(`
+            <html>
+              <head>
+                <title>訂購收據 - ${order.id}</title>
+                <style>
+                  body { 
+                    font-family: monospace; 
+                    white-space: pre; 
+                    font-size: 14px;
+                    margin: 20px;
+                  }
+                  @media print {
+                    body { margin: 0; padding: 10px; }
+                  }
+                </style>
+              </head>
+              <body>${content}</body>
+            </html>
+          `);
+          printWindow.document.close();
+          printWindow.print();
+        }
+
+        function Section({ title, children }) {
+          return (
+            <div style={{ marginBottom: '2rem' }}>
+              <h3 style={{
+                fontSize: '1.3rem',
+                color: '#D4915D',
+                marginBottom: '1rem',
+                borderBottom: '2px solid #FFE8CC',
+                paddingBottom: '0.5rem',
+              }}>
+                {title}
+              </h3>
+              {children}
+            </div>
+          );
+        }
+
+        function Input({ label, ...props }) {
+          return (
+            <div>
+              <label style={{
+                display: 'block',
+                marginBottom: '0.5rem',
+                fontWeight: 'bold',
+                fontSize: '1.1rem',
+              }}>
+                {label}
+              </label>
+              <input
+                {...props}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  fontSize: '1.1rem',
+                  border: '2px solid #E0E0E0',
+                  borderRadius: '8px',
+                }}
+              />
+            </div>
+          );
+        }
+
+        function RadioButton({ checked, onChange, label }) {
+          return (
+            <label style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.75rem 1.5rem',
+              background: checked ? '#D4915D' : 'white',
+              color: checked ? 'white' : '#333',
+              border: `2px solid ${checked ? '#D4915D' : '#E0E0E0'}`,
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '1.1rem',
+              fontWeight: checked ? 'bold' : 'normal',
+              transition: 'all 0.2s',
+            }}>
+              <input
+                type="radio"
+                checked={checked}
+                onChange={onChange}
+                style={{ display: 'none' }}
+              />
+              {label}
+            </label>
+          );
+        }
+
+        // 渲染應用程式
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<BakeryOrderSystem />);
+    </script>
+</body>
+</html>
