@@ -58,7 +58,7 @@
         // ============================================
         // 🔧 重要設定：請在此填入您的 Google Apps Script 網址
         // ============================================
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw35OmDlvLHfjQwJcVPr5M7EMfZEC4OtIDSyt5yhkJu7w2gK9DT8EkEFHfJzVnyRZLd/exec';
+        const GOOGLE_SCRIPT_URL = 'YOUR_GOOGLE_SCRIPT_URL_HERE';
         // 範例：'https://script.google.com/macros/s/AKfycby.../exec'
         // ============================================
 
@@ -1071,36 +1071,62 @@
         }
 
         function ProductionList({ orders }) {
-          const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+          // 取得本地時區的今天日期
+          const getLocalDate = () => {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+          };
           
-          const today = new Date().toISOString().split('T')[0];
-          const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+          const [selectedDate, setSelectedDate] = useState(getLocalDate());
 
-          // 根據選擇的日期計算
-          const isToday = selectedDate === today;
-          const selectedDateObj = new Date(selectedDate);
-          const nextDay = new Date(selectedDateObj);
-          nextDay.setDate(nextDay.getDate() + 1);
-          const nextDayStr = nextDay.toISOString().split('T')[0];
+          // 計算隔天日期（避免時區問題）
+          const getNextDay = (dateStr) => {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            const date = new Date(year, month - 1, day);
+            date.setDate(date.getDate() + 1);
+            const nextYear = date.getFullYear();
+            const nextMonth = String(date.getMonth() + 1).padStart(2, '0');
+            const nextDay = String(date.getDate()).padStart(2, '0');
+            return `${nextYear}-${nextMonth}-${nextDay}`;
+          };
 
-          const todayAfter4 = orders.filter(o => 
-            o.pickupDate === selectedDate && 
-            o.pickupTime === '下午4點後' &&
-            o.pickupStatus === '未取貨'
-          );
+          const nextDayStr = getNextDay(selectedDate);
 
-          const tomorrowBefore4 = orders.filter(o => 
-            o.pickupDate === nextDayStr && 
-            o.pickupTime === '下午4點前' &&
-            o.pickupStatus === '未取貨'
-          );
+          // 篩選訂單時只比較日期部分
+          const getDateOnly = (dateStr) => {
+            if (!dateStr) return '';
+            return dateStr.split('T')[0];
+          };
+
+          const todayAfter4 = orders.filter(o => {
+            const orderDate = getDateOnly(o.pickupDate);
+            return orderDate === selectedDate && 
+                   o.pickupTime === '下午4點後' &&
+                   o.pickupStatus === '未取貨';
+          });
+
+          const tomorrowBefore4 = orders.filter(o => {
+            const orderDate = getDateOnly(o.pickupDate);
+            return orderDate === nextDayStr && 
+                   o.pickupTime === '下午4點前' &&
+                   o.pickupStatus === '未取貨';
+          });
 
           const allProductionOrders = [...todayAfter4, ...tomorrowBefore4];
+          
+          console.log('Selected date:', selectedDate);
+          console.log('Next day:', nextDayStr);
+          console.log('Today after 4:', todayAfter4);
+          console.log('Tomorrow before 4:', tomorrowBefore4);
 
           const itemStats = {};
           
           allProductionOrders.forEach(order => {
-            if (order.worshipItems) {
+            // 統計拜拜用品
+            if (order.worshipItems && Array.isArray(order.worshipItems)) {
               order.worshipItems.forEach(item => {
                 const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
                 if (itemInfo) {
@@ -1112,6 +1138,7 @@
               });
             }
 
+            // 統計其他商品
             if (order.otherItems) {
               const lines = order.otherItems.split('\n');
               lines.forEach(line => {
@@ -1121,6 +1148,8 @@
               });
             }
           });
+          
+          console.log('Item stats:', itemStats);
 
           const handlePrint = () => {
             const content = generateProductionListContent(todayAfter4, tomorrowBefore4, itemStats, selectedDate);
@@ -1214,34 +1243,40 @@
         }
 
         function generateProductionListContent(todayAfter4, tomorrowBefore4, itemStats, selectedDate) {
-          const displayDate = new Date(selectedDate + 'T12:00:00');
-          const dateStr = displayDate.toLocaleDateString('zh-TW', { 
-            year: 'numeric', 
-            month: '2-digit', 
-            day: '2-digit',
-            weekday: 'long'
-          });
+          // 使用本地時區格式化日期，避免時區問題
+          const formatDateLocal = (dateStr) => {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            const date = new Date(year, month - 1, day);
+            const weekdays = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+            const weekday = weekdays[date.getDay()];
+            return `${year}/${String(month).padStart(2, '0')}/${String(day).padStart(2, '0')} ${weekday}`;
+          };
           
-          const nextDate = new Date(displayDate);
+          const selectedDateFormatted = formatDateLocal(selectedDate);
+          
+          // 計算隔天
+          const [year, month, day] = selectedDate.split('-').map(Number);
+          const nextDate = new Date(year, month - 1, day);
           nextDate.setDate(nextDate.getDate() + 1);
-          const nextDateStr = nextDate.toLocaleDateString('zh-TW', { 
-            year: 'numeric', 
-            month: '2-digit', 
-            day: '2-digit',
-            weekday: 'long'
-          });
+          const nextYear = nextDate.getFullYear();
+          const nextMonth = String(nextDate.getMonth() + 1).padStart(2, '0');
+          const nextDay = String(nextDate.getDate()).padStart(2, '0');
+          const nextDateStr = `${nextYear}-${nextMonth}-${nextDay}`;
+          const nextDateFormatted = formatDateLocal(nextDateStr);
 
           let content = `================================\n`;
           content += `      製作清單\n`;
-          content += `     ${dateStr}\n`;
+          content += `     ${selectedDateFormatted}\n`;
           content += `================================\n\n`;
 
           if (todayAfter4.length > 0) {
-            content += `${dateStr.split(' ')[0]} 下午4點後取貨：\n`;
+            content += `${selectedDateFormatted.split(' ')[0]} 下午4點後取貨：\n`;
             content += `--------------------------------\n`;
             todayAfter4.forEach(order => {
               content += `${order.customerName} - `;
-              if (order.worshipItems) {
+              
+              // 顯示拜拜用品
+              if (order.worshipItems && order.worshipItems.length > 0) {
                 order.worshipItems.forEach(item => {
                   const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
                   if (itemInfo) {
@@ -1251,20 +1286,29 @@
                   }
                 });
               }
+              
+              // 顯示其他商品
               if (order.otherItems) {
                 content += order.otherItems.replace(/\n/g, ' ');
               }
+              
               content += '\n';
             });
             content += '\n';
+          } else {
+            content += `${selectedDateFormatted.split(' ')[0]} 下午4點後取貨：\n`;
+            content += `--------------------------------\n`;
+            content += `無訂單\n\n`;
           }
 
           if (tomorrowBefore4.length > 0) {
-            content += `${nextDateStr.split(' ')[0]} 下午4點前取貨：\n`;
+            content += `${nextDateFormatted.split(' ')[0]} 下午4點前取貨：\n`;
             content += `--------------------------------\n`;
             tomorrowBefore4.forEach(order => {
               content += `${order.customerName} - `;
-              if (order.worshipItems) {
+              
+              // 顯示拜拜用品
+              if (order.worshipItems && order.worshipItems.length > 0) {
                 order.worshipItems.forEach(item => {
                   const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
                   if (itemInfo) {
@@ -1274,21 +1318,32 @@
                   }
                 });
               }
+              
+              // 顯示其他商品
               if (order.otherItems) {
                 content += order.otherItems.replace(/\n/g, ' ');
               }
+              
               content += '\n';
             });
             content += '\n';
+          } else {
+            content += `${nextDateFormatted.split(' ')[0]} 下午4點前取貨：\n`;
+            content += `--------------------------------\n`;
+            content += `無訂單\n\n`;
           }
 
           content += `================================\n`;
           content += `總計：\n`;
           content += `================================\n`;
-          Object.entries(itemStats).forEach(([item, count]) => {
-            const dots = '.'.repeat(Math.max(2, 30 - item.length - String(count).length));
-            content += `${item} ${dots} ${count}\n`;
-          });
+          if (Object.keys(itemStats).length > 0) {
+            Object.entries(itemStats).forEach(([item, count]) => {
+              const dots = '.'.repeat(Math.max(2, 30 - item.length - String(count).length));
+              content += `${item} ${dots} ${count}\n`;
+            });
+          } else {
+            content += `無商品\n`;
+          }
           content += `================================\n`;
 
           return content;
