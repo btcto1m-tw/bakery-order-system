@@ -1062,13 +1062,19 @@
                       <div style={{ marginTop: '0.5rem' }}>
                         <strong>其他商品：</strong>
                         {Array.isArray(order.otherItems) ? (
-                          order.otherItems.map((item, idx) => (
-                            <span key={idx}>
-                              {item.name} x{item.quantity}
-                              {idx < order.otherItems.length - 1 ? '、' : ''}
-                            </span>
-                          ))
-                        ) : (
+                          order.otherItems.map((item, idx) => {
+                            if (item && item.name) {
+                              const qty = item.quantity || 0;
+                              return (
+                                <span key={idx}>
+                                  {item.name} x{qty}
+                                  {idx < order.otherItems.length - 1 ? '、' : ''}
+                                </span>
+                              );
+                            }
+                            return null;
+                          })
+                        ) : typeof order.otherItems === 'string' ? (
                           <pre style={{ 
                             display: 'inline',
                             whiteSpace: 'pre-wrap',
@@ -1077,7 +1083,7 @@
                           }}>
                             {order.otherItems}
                           </pre>
-                        )}
+                        ) : null}
                       </div>
                     )}
                     
@@ -1227,11 +1233,12 @@
               if (Array.isArray(order.otherItems)) {
                 // 新格式：陣列
                 order.otherItems.forEach(item => {
-                  if (item.name && item.name.trim()) {
-                    itemStats[item.name.trim()] = (itemStats[item.name.trim()] || 0) + Number(item.quantity);
+                  if (item && item.name && item.name.trim()) {
+                    const qty = Number(item.quantity) || 0;
+                    itemStats[item.name.trim()] = (itemStats[item.name.trim()] || 0) + qty;
                   }
                 });
-              } else {
+              } else if (typeof order.otherItems === 'string') {
                 // 舊格式：字串（向下兼容）
                 const lines = order.otherItems.split('\n');
                 lines.forEach(line => {
@@ -1395,11 +1402,12 @@
                 if (Array.isArray(order.otherItems)) {
                   // 新格式：陣列
                   order.otherItems.forEach(item => {
-                    if (item.name && item.name.trim()) {
-                      content += `${item.name.trim()} x${item.quantity} `;
+                    if (item && item.name && item.name.trim()) {
+                      const qty = item.quantity || 0;
+                      content += `${item.name.trim()} x${qty} `;
                     }
                   });
-                } else {
+                } else if (typeof order.otherItems === 'string') {
                   // 舊格式：字串
                   content += order.otherItems.replace(/\n/g, ' ');
                 }
@@ -1437,11 +1445,12 @@
                 if (Array.isArray(order.otherItems)) {
                   // 新格式：陣列
                   order.otherItems.forEach(item => {
-                    if (item.name && item.name.trim()) {
-                      content += `${item.name.trim()} x${item.quantity} `;
+                    if (item && item.name && item.name.trim()) {
+                      const qty = item.quantity || 0;
+                      content += `${item.name.trim()} x${qty} `;
                     }
                   });
-                } else {
+                } else if (typeof order.otherItems === 'string') {
                   // 舊格式：字串
                   content += order.otherItems.replace(/\n/g, ' ');
                 }
@@ -1651,11 +1660,12 @@
             if (Array.isArray(order.otherItems)) {
               // 新格式：陣列
               order.otherItems.forEach(item => {
-                if (item.name && item.name.trim()) {
-                  content += `${item.name.trim()} x${item.quantity}\n`;
+                if (item && item.name && item.name.trim()) {
+                  const qty = item.quantity || 0;
+                  content += `${item.name.trim()} x${qty}\n`;
                 }
               });
-            } else {
+            } else if (typeof order.otherItems === 'string') {
               // 舊格式：字串
               const lines = order.otherItems.split('\n');
               lines.forEach(line => {
