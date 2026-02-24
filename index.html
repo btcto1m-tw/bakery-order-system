@@ -525,7 +525,7 @@
               pickupTime,
               customPickupTime: pickupTime === '其他' ? customPickupTime : '',
               customerName,
-              phone,
+              phone: String(phone).trim(),
               notes,
               pickupStatus: editingOrder?.pickupStatus || '未取貨',
             };
