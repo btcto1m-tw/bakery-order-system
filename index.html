@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>進發素食麵包店 訂單系統（雲端版）</title>
     <!-- ==================== 版本資訊 ==================== -->
-    <!-- 版本：v2.1 - 2026-02-24 -->
-    <!-- 更新內容：智能解析無空格格式、新增白豆內餡、壽桃餅可選內餡、修正時區問題 -->
+    <!-- 版本：v2.2 - 2026-02-24 -->
+    <!-- 更新內容：修正搜尋邏輯、優化內餡選項、改進金額輸入 -->
     <!-- ================================================== -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -634,7 +634,7 @@
                             borderRadius: '8px',
                           }}
                         >
-                          <option value="">公版內餡</option>
+                          <option value="">請選擇</option>
                           {FILLING_OPTIONS.map(f => (
                             <option key={f} value={f}>{f}</option>
                           ))}
@@ -722,20 +722,50 @@
 
                 <Section title="金額資訊">
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <Input
-                      label="總金額"
-                      type="number"
-                      value={totalAmount}
-                      onChange={(e) => setTotalAmount(e.target.value)}
-                      placeholder="0"
-                    />
-                    <Input
-                      label="訂金"
-                      type="number"
-                      value={deposit}
-                      onChange={(e) => setDeposit(e.target.value)}
-                      placeholder="0"
-                    />
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                        總金額
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={totalAmount === 0 ? '' : totalAmount}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^\d]/g, '');
+                          setTotalAmount(value ? Number(value) : 0);
+                        }}
+                        placeholder="金額"
+                        style={{
+                          width: '100%',
+                          padding: '0.75rem',
+                          fontSize: '1.1rem',
+                          border: '2px solid #E0E0E0',
+                          borderRadius: '8px',
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                        訂金
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={deposit === 0 ? '' : deposit}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/[^\d]/g, '');
+                          setDeposit(value ? Number(value) : 0);
+                        }}
+                        placeholder="若無則留空"
+                        style={{
+                          width: '100%',
+                          padding: '0.75rem',
+                          fontSize: '1.1rem',
+                          border: '2px solid #E0E0E0',
+                          borderRadius: '8px',
+                        }}
+                      />
+                    </div>
                   </div>
                   <div style={{
                     marginTop: '1rem',
@@ -1456,11 +1486,22 @@
 
           const itemStats = {};
           filteredOrders.forEach(order => {
+            const keyword = searchKeyword.trim().toLowerCase();
+            
             // 統計拜拜用品
             if (order.worshipItems) {
               order.worshipItems.forEach(item => {
                 const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
                 if (itemInfo) {
+                  // 如果有關鍵字，只統計符合的商品
+                  if (keyword) {
+                    const matchName = itemInfo.name.toLowerCase().includes(keyword);
+                    const matchFilling = item.filling && item.filling.toLowerCase().includes(keyword);
+                    if (!matchName && !matchFilling) {
+                      return; // 跳過不符合的商品
+                    }
+                  }
+                  
                   const key = item.filling ? 
                     `${itemInfo.name} (${item.filling})` : 
                     itemInfo.name;
@@ -1476,6 +1517,13 @@
                 if (line.trim()) {
                   const parsed = parseOtherItem(line.trim());
                   if (parsed) {
+                    // 如果有關鍵字，只統計符合的商品
+                    if (keyword) {
+                      if (!parsed.name.toLowerCase().includes(keyword)) {
+                        return; // 跳過不符合的商品
+                      }
+                    }
+                    
                     itemStats[parsed.name] = (itemStats[parsed.name] || 0) + parsed.quantity;
                   }
                 }
