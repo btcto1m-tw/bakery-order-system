@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>進發素食麵包店 訂單系統（雲端版）</title>
+    <!-- ==================== 版本資訊 ==================== -->
+    <!-- 版本：v2.0 - 2026-02-24 -->
+    <!-- 更新內容：智能解析其他商品、新增布丁選項、修正電話號碼 -->
+    <!-- ================================================== -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -64,8 +68,8 @@
 
         // 拜拜用品商品清單
         const WORSHIP_ITEMS = [
-          { id: 'sansheng-bread', name: '三牲麵包', price: 190, note: '內餡：香甜葡萄乾', hasFillingOption: false },
-          { id: 'wusheng-bread', name: '五牲麵包', price: 260, note: '內餡：香甜葡萄乾', hasFillingOption: false },
+          { id: 'sansheng-bread', name: '三牲麵包', price: 190, note: '內餡：葡萄乾', hasFillingOption: false },
+          { id: 'wusheng-bread', name: '五牲麵包', price: 260, note: '內餡：葡萄乾', hasFillingOption: false },
           { id: 'sansheng-cake', name: '三牲餅', price: 360, note: '公版內餡：烏豆沙 + 綠豆沙 + 鳳梨', hasFillingOption: true },
           { id: 'wusheng-cake', name: '五牲餅', price: 540, note: '公版內餡：烏豆沙 + 綠豆沙 + 鳳梨', hasFillingOption: true },
           { id: 'peach-bread', name: '壽桃麵包', price: 30, note: '無包內餡', hasFillingOption: false },
@@ -73,6 +77,9 @@
           { id: 'peach-cake-meat', name: '壽桃餅（素魯肉）', price: 35, note: '', hasFillingOption: false },
           { id: 'sansheng-meat', name: '全素魯肉三牲餅', price: 400, note: '全部包素魯肉', hasFillingOption: false },
           { id: 'wusheng-meat', name: '全素魯肉五牲餅', price: 600, note: '全部包素魯肉', hasFillingOption: false },
+          { id: 'small-pudding', name: '小布丁', price: 70, note: '', hasFillingOption: false },
+          { id: 'medium-pudding', name: '中布丁', price: 150, note: '', hasFillingOption: false },
+          { id: 'large-pudding', name: '大布丁', price: 250, note: '', hasFillingOption: false },
         ];
 
         const FILLING_OPTIONS = ['紅豆', '烏豆', '綠豆', '鳳梨'];
@@ -91,6 +98,35 @@
           }
           
           return `${dateOnly} ${timeStr}`;
+        };
+
+        // 智能解析其他商品的名稱和數量
+        const parseOtherItem = (line) => {
+          if (!line || !line.trim()) return null;
+          
+          const text = line.trim();
+          
+          // 嘗試匹配各種格式
+          // 格式1: "商品名稱 x數字" 或 "商品名稱x數字"
+          let match = text.match(/^(.+?)\s*[xX×]\s*(\d+)$/);
+          if (match) {
+            return { name: match[1].trim(), quantity: parseInt(match[2]) };
+          }
+          
+          // 格式2: "商品名稱 數字個" 或 "商品名稱數字個"
+          match = text.match(/^(.+?)\s*(\d+)\s*個$/);
+          if (match) {
+            return { name: match[1].trim(), quantity: parseInt(match[2]) };
+          }
+          
+          // 格式3: "商品名稱 數字" (空格+純數字)
+          match = text.match(/^(.+?)\s+(\d+)$/);
+          if (match) {
+            return { name: match[1].trim(), quantity: parseInt(match[2]) };
+          }
+          
+          // 格式4: 沒有數量，當作1個
+          return { name: text, quantity: 1 };
         };
 
         // 生成訂單編號
@@ -639,10 +675,12 @@
                   <textarea
                     value={otherItems}
                     onChange={(e) => setOtherItems(e.target.value)}
-                    placeholder="每行一個商品，例如：
-紅豆麵包 5個
-芋頭麵包 3個
-波蘿麵包 10個"
+                    placeholder="每行一個商品，建議格式：
+紅豆麵包 x5
+芋頭麵包 5個
+波蘿麵包 10
+
+系統會自動統計數量"
                     rows={6}
                     style={{
                       width: '100%',
@@ -1136,7 +1174,7 @@
           const itemStats = {};
           
           allProductionOrders.forEach(order => {
-            // 只統計拜拜用品
+            // 統計拜拜用品
             if (order.worshipItems && Array.isArray(order.worshipItems)) {
               order.worshipItems.forEach(item => {
                 const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
@@ -1148,7 +1186,20 @@
                 }
               });
             }
-            // 其他商品不統計
+            
+            // 智能解析並統計其他商品
+            if (order.otherItems && order.otherItems.trim()) {
+              const lines = order.otherItems.split('\n');
+              lines.forEach(line => {
+                if (line.trim()) {
+                  // 智能解析格式
+                  const parsed = parseOtherItem(line.trim());
+                  if (parsed) {
+                    itemStats[parsed.name] = (itemStats[parsed.name] || 0) + parsed.quantity;
+                  }
+                }
+              });
+            }
           });
           
           console.log('Item stats:', itemStats);
@@ -1397,6 +1448,7 @@
 
           const itemStats = {};
           filteredOrders.forEach(order => {
+            // 統計拜拜用品
             if (order.worshipItems) {
               order.worshipItems.forEach(item => {
                 const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
@@ -1405,6 +1457,19 @@
                     `${itemInfo.name} (${item.filling})` : 
                     itemInfo.name;
                   itemStats[key] = (itemStats[key] || 0) + Number(item.quantity);
+                }
+              });
+            }
+            
+            // 智能解析並統計其他商品
+            if (order.otherItems && order.otherItems.trim()) {
+              const lines = order.otherItems.split('\n');
+              lines.forEach(line => {
+                if (line.trim()) {
+                  const parsed = parseOtherItem(line.trim());
+                  if (parsed) {
+                    itemStats[parsed.name] = (itemStats[parsed.name] || 0) + parsed.quantity;
+                  }
                 }
               });
             }
