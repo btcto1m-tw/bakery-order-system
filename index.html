@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>進發素食麵包店 訂單系統（雲端版）</title>
     <!-- ==================== 版本資訊 ==================== -->
-    <!-- 版本：v2.0 - 2026-02-24 -->
-    <!-- 更新內容：智能解析其他商品、新增布丁選項、修正電話號碼 -->
+    <!-- 版本：v2.1 - 2026-02-24 -->
+    <!-- 更新內容：智能解析無空格格式、新增白豆內餡、壽桃餅可選內餡、修正時區問題 -->
     <!-- ================================================== -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -73,7 +73,7 @@
           { id: 'sansheng-cake', name: '三牲餅', price: 360, note: '公版內餡：烏豆沙 + 綠豆沙 + 鳳梨', hasFillingOption: true },
           { id: 'wusheng-cake', name: '五牲餅', price: 540, note: '公版內餡：烏豆沙 + 綠豆沙 + 鳳梨', hasFillingOption: true },
           { id: 'peach-bread', name: '壽桃麵包', price: 30, note: '無包內餡', hasFillingOption: false },
-          { id: 'peach-cake-bean', name: '壽桃餅（豆沙餡）', price: 30, note: '', hasFillingOption: false },
+          { id: 'peach-cake-bean', name: '壽桃餅（豆沙餡）', price: 30, note: '可選內餡', hasFillingOption: true },
           { id: 'peach-cake-meat', name: '壽桃餅（素魯肉）', price: 35, note: '', hasFillingOption: false },
           { id: 'sansheng-meat', name: '全素魯肉三牲餅', price: 400, note: '全部包素魯肉', hasFillingOption: false },
           { id: 'wusheng-meat', name: '全素魯肉五牲餅', price: 600, note: '全部包素魯肉', hasFillingOption: false },
@@ -82,7 +82,7 @@
           { id: 'large-pudding', name: '大布丁', price: 250, note: '', hasFillingOption: false },
         ];
 
-        const FILLING_OPTIONS = ['紅豆', '烏豆', '綠豆', '鳳梨'];
+        const FILLING_OPTIONS = ['紅豆', '烏豆', '綠豆', '鳳梨', '白豆'];
         const PICKUP_TIMES = ['下午4點前', '下午4點後', '其他'];
 
         // 格式化取貨時間顯示
@@ -125,7 +125,14 @@
             return { name: match[1].trim(), quantity: parseInt(match[2]) };
           }
           
-          // 格式4: 沒有數量，當作1個
+          // 格式4: "商品名稱數字" (無空格，結尾是數字) - 新增
+          // 確保商品名稱至少2個字，避免將 "3" 誤判為 "商品名稱=空, 數量=3"
+          match = text.match(/^(.{2,}?)(\d+)$/);
+          if (match) {
+            return { name: match[1].trim(), quantity: parseInt(match[2]) };
+          }
+          
+          // 格式5: 沒有數量，當作1個
           return { name: text, quantity: 1 };
         };
 
@@ -675,10 +682,11 @@
                   <textarea
                     value={otherItems}
                     onChange={(e) => setOtherItems(e.target.value)}
-                    placeholder="每行一個商品，建議格式：
+                    placeholder="每行一個商品，支援多種格式：
 紅豆麵包 x5
 芋頭麵包 5個
-波蘿麵包 10
+波蘿麵包10
+肉鬆麵包
 
 系統會自動統計數量"
                     rows={6}
