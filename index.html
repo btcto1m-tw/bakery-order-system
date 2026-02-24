@@ -428,10 +428,14 @@
         function NewOrderForm({ onSubmit, editingOrder, onCancel }) {
           const [hasEgg, setHasEgg] = useState(editingOrder?.hasEgg ?? false);
           const [worshipItems, setWorshipItems] = useState(editingOrder?.worshipItems ?? []);
-          // 處理舊資料兼容：如果是字串就轉換為空陣列，如果是陣列就直接用
+          // 其他商品改回簡單字串
           const [otherItems, setOtherItems] = useState(() => {
-            if (!editingOrder?.otherItems) return [];
-            if (typeof editingOrder.otherItems === 'string') return [];
+            if (!editingOrder?.otherItems) return '';
+            // 如果是陣列格式，轉換成文字
+            if (Array.isArray(editingOrder.otherItems)) {
+              return editingOrder.otherItems.map(item => `${item.name} x${item.quantity}`).join('\n');
+            }
+            // 如果是字串就直接用
             return editingOrder.otherItems;
           });
           const [totalAmount, setTotalAmount] = useState(editingOrder?.totalAmount ?? 0);
@@ -455,20 +459,6 @@
 
           const removeWorshipItem = (index) => {
             setWorshipItems(worshipItems.filter((_, i) => i !== index));
-          };
-
-          const addOtherItem = () => {
-            setOtherItems([...otherItems, { name: '', quantity: '' }]);
-          };
-
-          const updateOtherItem = (index, field, value) => {
-            const updated = [...otherItems];
-            updated[index] = { ...updated[index], [field]: value };
-            setOtherItems(updated);
-          };
-
-          const removeOtherItem = (index) => {
-            setOtherItems(otherItems.filter((_, i) => i !== index));
           };
 
           const handleSubmit = (e) => {
@@ -646,78 +636,24 @@
                 </Section>
 
                 <Section title="其他商品">
-                  {otherItems.map((item, index) => (
-                    <div key={index} style={{
-                      display: 'grid',
-                      gridTemplateColumns: '2fr 1fr auto',
-                      gap: '1rem',
-                      marginBottom: '1rem',
-                      alignItems: 'center',
-                    }}>
-                      <input
-                        type="text"
-                        value={item.name}
-                        onChange={(e) => updateOtherItem(index, 'name', e.target.value)}
-                        placeholder="商品名稱（例如：紅豆麵包）"
-                        required
-                        style={{
-                          padding: '0.75rem',
-                          fontSize: '1.1rem',
-                          border: '2px solid #E0E0E0',
-                          borderRadius: '8px',
-                        }}
-                      />
-
-                      <input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => updateOtherItem(index, 'quantity', e.target.value)}
-                        placeholder="數量"
-                        required
-                        style={{
-                          padding: '0.75rem',
-                          fontSize: '1.1rem',
-                          border: '2px solid #E0E0E0',
-                          borderRadius: '8px',
-                        }}
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => removeOtherItem(index)}
-                        style={{
-                          padding: '0.75rem',
-                          background: '#FF6B6B',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '8px',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={addOtherItem}
+                  <textarea
+                    value={otherItems}
+                    onChange={(e) => setOtherItems(e.target.value)}
+                    placeholder="每行一個商品，例如：
+紅豆麵包 5個
+芋頭麵包 3個
+波蘿麵包 10個"
+                    rows={6}
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      padding: '0.75rem 1.5rem',
-                      background: '#D4915D',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
+                      width: '100%',
+                      padding: '0.75rem',
                       fontSize: '1.1rem',
-                      cursor: 'pointer',
-                      marginTop: '1rem',
+                      border: '2px solid #E0E0E0',
+                      borderRadius: '8px',
+                      fontFamily: 'inherit',
+                      resize: 'vertical',
                     }}
-                  >
-                    ➕ 新增商品
-                  </button>
+                  />
                 </Section>
 
                 <Section title="備註">
@@ -824,7 +760,7 @@
                       type="tel"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      placeholder="0912-345-678"
+                      placeholder="0912345678"
                       required
                     />
                   </div>
@@ -1061,29 +997,14 @@
                     {order.otherItems && (
                       <div style={{ marginTop: '0.5rem' }}>
                         <strong>其他商品：</strong>
-                        {Array.isArray(order.otherItems) ? (
-                          order.otherItems.map((item, idx) => {
-                            if (item && item.name) {
-                              const qty = item.quantity || 0;
-                              return (
-                                <span key={idx}>
-                                  {item.name} x{qty}
-                                  {idx < order.otherItems.length - 1 ? '、' : ''}
-                                </span>
-                              );
-                            }
-                            return null;
-                          })
-                        ) : typeof order.otherItems === 'string' ? (
-                          <pre style={{ 
-                            display: 'inline',
-                            whiteSpace: 'pre-wrap',
-                            fontFamily: 'inherit',
-                            margin: 0,
-                          }}>
-                            {order.otherItems}
-                          </pre>
-                        ) : null}
+                        <pre style={{ 
+                          display: 'inline',
+                          whiteSpace: 'pre-wrap',
+                          fontFamily: 'inherit',
+                          margin: 0,
+                        }}>
+                          {order.otherItems}
+                        </pre>
                       </div>
                     )}
                     
@@ -1215,7 +1136,7 @@
           const itemStats = {};
           
           allProductionOrders.forEach(order => {
-            // 統計拜拜用品
+            // 只統計拜拜用品
             if (order.worshipItems && Array.isArray(order.worshipItems)) {
               order.worshipItems.forEach(item => {
                 const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
@@ -1227,36 +1148,7 @@
                 }
               });
             }
-
-            // 統計其他商品
-            if (order.otherItems) {
-              if (Array.isArray(order.otherItems)) {
-                // 新格式：陣列
-                order.otherItems.forEach(item => {
-                  if (item && item.name && item.name.trim()) {
-                    const qty = Number(item.quantity) || 0;
-                    itemStats[item.name.trim()] = (itemStats[item.name.trim()] || 0) + qty;
-                  }
-                });
-              } else if (typeof order.otherItems === 'string') {
-                // 舊格式：字串（向下兼容）
-                const lines = order.otherItems.split('\n');
-                lines.forEach(line => {
-                  if (line.trim()) {
-                    // 嘗試解析格式：商品名稱 x數量
-                    const match = line.trim().match(/^(.+?)\s*x\s*(\d+)$/i);
-                    if (match) {
-                      const itemName = match[1].trim();
-                      const quantity = parseInt(match[2]);
-                      itemStats[itemName] = (itemStats[itemName] || 0) + quantity;
-                    } else {
-                      // 如果沒有 x格式，整行當作商品名稱，數量為 1
-                      itemStats[line.trim()] = (itemStats[line.trim()] || 0) + 1;
-                    }
-                  }
-                });
-              }
-            }
+            // 其他商品不統計
           });
           
           console.log('Item stats:', itemStats);
@@ -1399,19 +1291,8 @@
               }
               
               // 顯示其他商品
-              if (order.otherItems) {
-                if (Array.isArray(order.otherItems)) {
-                  // 新格式：陣列
-                  order.otherItems.forEach(item => {
-                    if (item && item.name && item.name.trim()) {
-                      const qty = item.quantity || 0;
-                      content += `${item.name.trim()} x${qty} `;
-                    }
-                  });
-                } else if (typeof order.otherItems === 'string') {
-                  // 舊格式：字串
-                  content += order.otherItems.replace(/\n/g, ' ');
-                }
+              if (order.otherItems && order.otherItems.trim()) {
+                content += order.otherItems.replace(/\n/g, ' ');
               }
               
               content += '\n';
@@ -1442,19 +1323,8 @@
               }
               
               // 顯示其他商品
-              if (order.otherItems) {
-                if (Array.isArray(order.otherItems)) {
-                  // 新格式：陣列
-                  order.otherItems.forEach(item => {
-                    if (item && item.name && item.name.trim()) {
-                      const qty = item.quantity || 0;
-                      content += `${item.name.trim()} x${qty} `;
-                    }
-                  });
-                } else if (typeof order.otherItems === 'string') {
-                  // 舊格式：字串
-                  content += order.otherItems.replace(/\n/g, ' ');
-                }
+              if (order.otherItems && order.otherItems.trim()) {
+                content += order.otherItems.replace(/\n/g, ' ');
               }
               
               content += '\n';
@@ -1486,12 +1356,43 @@
           const [startDate, setStartDate] = useState('');
           const [endDate, setEndDate] = useState('');
           const [selectedTime, setSelectedTime] = useState('all');
+          const [searchKeyword, setSearchKeyword] = useState('');
 
           const filteredOrders = orders.filter(order => {
             const matchDate = (!startDate || order.pickupDate >= startDate) &&
                              (!endDate || order.pickupDate <= endDate);
             const matchTime = selectedTime === 'all' || order.pickupTime === selectedTime;
-            return matchDate && matchTime && order.pickupStatus !== '已取消';
+            
+            // 關鍵字搜尋
+            let matchKeyword = true;
+            if (searchKeyword.trim()) {
+              const keyword = searchKeyword.toLowerCase();
+              matchKeyword = false;
+              
+              // 搜尋拜拜用品
+              if (order.worshipItems && order.worshipItems.length > 0) {
+                matchKeyword = order.worshipItems.some(item => {
+                  const itemInfo = WORSHIP_ITEMS.find(w => w.id === item.itemId);
+                  if (itemInfo) {
+                    return itemInfo.name.toLowerCase().includes(keyword) ||
+                           (item.filling && item.filling.toLowerCase().includes(keyword));
+                  }
+                  return false;
+                });
+              }
+              
+              // 搜尋其他商品
+              if (!matchKeyword && order.otherItems) {
+                matchKeyword = order.otherItems.toLowerCase().includes(keyword);
+              }
+              
+              // 搜尋客戶名稱
+              if (!matchKeyword && order.customerName) {
+                matchKeyword = order.customerName.toLowerCase().includes(keyword);
+              }
+            }
+            
+            return matchDate && matchTime && matchKeyword && order.pickupStatus !== '已取消';
           });
 
           const itemStats = {};
@@ -1512,7 +1413,7 @@
           const sortedStats = Object.entries(itemStats).sort((a, b) => b[1] - a[1]);
 
           const handlePrint = () => {
-            const content = generateStatisticsContent(startDate, endDate, selectedTime, sortedStats);
+            const content = generateStatisticsContent(startDate, endDate, selectedTime, searchKeyword, sortedStats);
             const printWindow = window.open('', '', 'width=800,height=600');
             printWindow.document.write(`
               <html>
@@ -1545,9 +1446,9 @@
 
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr 1fr auto',
+                gridTemplateColumns: '1fr 1fr 1fr 1fr',
                 gap: '1rem',
-                marginBottom: '2rem',
+                marginBottom: '1rem',
               }}>
                 <Input
                   label="開始日期"
@@ -1581,22 +1482,30 @@
                     <option value="下午4點後">下午4點後</option>
                   </select>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                  <button
-                    onClick={handlePrint}
-                    style={{
-                      padding: '0.75rem 1.5rem',
-                      background: '#2196F3',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '8px',
-                      fontSize: '1.1rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    🖨️ 列印
-                  </button>
-                </div>
+                <Input
+                  label="關鍵字搜尋"
+                  type="text"
+                  value={searchKeyword}
+                  onChange={(e) => setSearchKeyword(e.target.value)}
+                  placeholder="商品名稱、內餡、客戶姓名"
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '2rem' }}>
+                <button
+                  onClick={handlePrint}
+                  style={{
+                    padding: '0.75rem 1.5rem',
+                    background: '#2196F3',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '1.1rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  🖨️ 列印
+                </button>
               </div>
 
               <div style={{
@@ -1610,16 +1519,19 @@
                   lineHeight: '1.8',
                   whiteSpace: 'pre-wrap',
                 }}>
-                  {generateStatisticsContent(startDate, endDate, selectedTime, sortedStats)}
+                  {generateStatisticsContent(startDate, endDate, selectedTime, searchKeyword, sortedStats)}
                 </div>
               </div>
             </div>
           );
         }
 
-        function generateStatisticsContent(startDate, endDate, selectedTime, sortedStats) {
+        function generateStatisticsContent(startDate, endDate, selectedTime, searchKeyword, sortedStats) {
           let content = `統計期間：${startDate || '不限'} ~ ${endDate || '不限'}\n`;
           content += `取貨時段：${selectedTime === 'all' ? '全部' : selectedTime}\n`;
+          if (searchKeyword.trim()) {
+            content += `關鍵字：${searchKeyword}\n`;
+          }
           content += `--------------------------------\n`;
           
           if (sortedStats.length === 0) {
@@ -1657,24 +1569,13 @@
             });
           }
 
-          if (order.otherItems) {
-            if (Array.isArray(order.otherItems)) {
-              // 新格式：陣列
-              order.otherItems.forEach(item => {
-                if (item && item.name && item.name.trim()) {
-                  const qty = item.quantity || 0;
-                  content += `${item.name.trim()} x${qty}\n`;
-                }
-              });
-            } else if (typeof order.otherItems === 'string') {
-              // 舊格式：字串
-              const lines = order.otherItems.split('\n');
-              lines.forEach(line => {
-                if (line.trim()) {
-                  content += `${line.trim()}\n`;
-                }
-              });
-            }
+          if (order.otherItems && order.otherItems.trim()) {
+            const lines = order.otherItems.split('\n');
+            lines.forEach(line => {
+              if (line.trim()) {
+                content += `${line.trim()}\n`;
+              }
+            });
           }
 
           if (order.notes) {
