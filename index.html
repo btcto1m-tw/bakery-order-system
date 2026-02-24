@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>進發素食麵包店 訂單系統（雲端版）</title>
     <!-- ==================== 版本資訊 ==================== -->
-    <!-- 版本：v2.2 - 2026-02-24 -->
-    <!-- 更新內容：修正搜尋邏輯、優化內餡選項、改進金額輸入 -->
+    <!-- 版本：v2.3 - 2026-02-24 -->
+    <!-- 更新內容：新增標記未取貨按鈕、修正電話號碼格式 -->
     <!-- ================================================== -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -1107,6 +1107,22 @@
                       }}
                     >
                       標記已取貨
+                    </button>
+                  )}
+                  {order.pickupStatus === '已取貨' && (
+                    <button
+                      onClick={() => onUpdateStatus('未取貨')}
+                      style={{
+                        padding: '0.5rem 1rem',
+                        background: '#FFC107',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '1rem',
+                      }}
+                    >
+                      標記未取貨
                     </button>
                   )}
                   <button
